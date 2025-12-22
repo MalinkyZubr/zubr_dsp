@@ -1,4 +1,4 @@
-use crate::pipeline::construction_layer::pipeline_step::PipelineNode;
+use crate::pipeline::construction_layer::pipeline_node::PipelineNode;
 use crate::pipeline::orchestration_layer::pipeline::ConstructionQueue;
 
 pub trait PipelineRecipe<

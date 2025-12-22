@@ -4,7 +4,7 @@ mod pipeline_tests {
     use crate::pipeline::api::ConstructingPipeline;
     use crate::pipeline::api::*;
     use crate::pipeline::orchestration_layer::logging::initialize_logger;
-    use crate::pipeline::construction_layer::pipeline_step::joint_feedback_begin;
+    use crate::pipeline::construction_layer::pipeline_node::joint_feedback_begin;
     use crate::pipeline::pipeline_traits::{Sink, Source};
     use crate::pipeline::interfaces::{ODFormat, PipelineStep};
 

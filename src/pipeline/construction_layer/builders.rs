@@ -15,7 +15,7 @@ use crate::pipeline::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
 use std::sync::atomic::{AtomicU8, AtomicUsize};
 use std::sync::{mpsc, Arc};
 use crate::pipeline::api::{ConstructingPipeline, PipelineParameters, PipelineThread, ThreadStateSpace};
-use crate::pipeline::construction_layer::pipeline_step::PipelineNode;
+use crate::pipeline::construction_layer::pipeline_node::PipelineNode;
 
 pub struct NodeBuilder<I: Sharable, O: Sharable> {
     node: PipelineNode<I, O>,
