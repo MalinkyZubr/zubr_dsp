@@ -3,7 +3,7 @@
 #![feature(let_chains)]
 
 
-use pipeline::logging::initialize_logger;
+use pipeline::orchestration_layer::logging::initialize_logger;
 
 
 mod pipeline;

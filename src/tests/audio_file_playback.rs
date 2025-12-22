@@ -1,11 +1,11 @@
 use crate::pipeline::api::*;
-use crate::pipeline::sources::audio_file_source::AudioFileSource;
+use crate::pipeline::construction_layer::::audio_file_source::AudioFileSource;
 use crate::pipeline::endpoints::*;
 
 
 mod end_to_end_tests {
     use crate::pipeline::endpoints::audio_endpoint::AudioSink;
-    use crate::pipeline::logging::initialize_logger;
+    use crate::pipeline::orchestration_layer::logging::initialize_logger;
     use super::*;
     use rodio::{OutputStream, OutputStreamBuilder};
 

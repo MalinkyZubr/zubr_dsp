@@ -1,6 +1,6 @@
 use num::Complex;
-use crate::pipeline::api::{ODFormat, PipelineStep};
-
+use crate::pipeline::interfaces::PipelineStep;
+use crate::pipeline::interfaces::ODFormat;
 
 pub struct ComplexCaster {}
 impl PipelineStep<Vec<f32>, Vec<Complex<f32>>> for ComplexCaster {

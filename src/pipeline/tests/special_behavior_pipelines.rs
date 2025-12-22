@@ -4,7 +4,7 @@ mod pipeline_tests {
     use std::thread::sleep;
     use futures::AsyncReadExt;
     use crate::pipeline::api::*;
-    use crate::pipeline::logging::initialize_logger;
+    use crate::pipeline::orchestration_layer::logging::initialize_logger;
     use super::*;
 
 

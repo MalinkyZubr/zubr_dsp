@@ -1,13 +1,12 @@
 #[cfg(test)]
 mod pipeline_tests {
     use std::sync::mpsc;
-    use crate::pipeline::api::{ConstructingPipeline, ODFormat};
+    use crate::pipeline::api::ConstructingPipeline;
     use crate::pipeline::api::*;
-    use crate::pipeline::logging::initialize_logger;
-    use crate::pipeline::pipeline_step::{joint_feedback_begin, PipelineNode, PipelineStep};
-    use crate::pipeline::pipeline_traits::{Source, Sink};
-    use crate::pipeline::pipeline_comms::{ReceiveType};
-
+    use crate::pipeline::orchestration_layer::logging::initialize_logger;
+    use crate::pipeline::interfaces::PipelineStep;
+    use crate::pipeline::pipeline_traits::{Sink, Source};
+    use crate::pipeline::interfaces::ODFormat;
 
     struct Dummy1 {
         receiver: mpsc::Receiver<u32>

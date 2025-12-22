@@ -3,9 +3,8 @@ mod pipeline_tests {
     use std::sync::mpsc;
     use crate::pipeline::api::ConstructingPipeline;
     use crate::pipeline::api::*;
-    use crate::pipeline::logging::initialize_logger;
-    use crate::pipeline::pipeline_comms::{ReceiveType, ODFormat};
-
+    use crate::pipeline::orchestration_layer::logging::initialize_logger;
+    use crate::pipeline::interfaces::ODFormat;
 
     struct Dummy1 {
         receiver: mpsc::Receiver<u32>

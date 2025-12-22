@@ -3,7 +3,7 @@ mod pipeline_tests {
     use std::sync::mpsc;
     use std::thread::sleep;
     use crate::pipeline::api::*;
-    use crate::pipeline::logging::initialize_logger;
+    use crate::pipeline::orchestration_layer::logging::initialize_logger;
     use super::*;
 
 

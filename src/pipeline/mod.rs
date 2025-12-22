@@ -1,19 +1,11 @@
-// pub mod pipeline_struct;
-// pub mod welder;
-// pub mod node_enum;
-mod pipeline;
-mod pipeline_step;
-mod pipeline_thread;
 mod tests;
-pub mod endpoints;
-pub mod sources;
-mod valid_types;
-mod pipeline_traits;
-mod pipeline_comms;
+
 pub mod api;
-pub mod logging;
-mod thread_state_space;
-pub mod pipeline_thread_orchestrator;
-mod pipeline_thread_admin_io;
+mod communication_layer;
+mod threading_layer;
+mod orchestration_layer;
+mod construction_layer;
+pub mod interfaces;
+pub mod pipeline_traits;
 //mod dummy;
 //mod curses;
