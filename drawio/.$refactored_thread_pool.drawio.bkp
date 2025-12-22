@@ -76,7 +76,7 @@
         <mxCell id="xm97tIzFpSOHS7XiSRMR-33" value="Depth 4" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="750" y="340" width="190" height="440" as="geometry" />
         </mxCell>
-        <mxCell id="xm97tIzFpSOHS7XiSRMR-34" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-34" value="Suppose one step is taking a very long time to execute. Well, the suggested design will iterate over ordered list of steps, and append them ot rayon until its queue is full. Since the executions are always in order. We assume some fixed max on the rayon internal capacity, it has its own internal collection to reduce latency in work stealing.&amp;nbsp;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="415" y="800" width="485" height="130" as="geometry" />
         </mxCell>
       </root>
