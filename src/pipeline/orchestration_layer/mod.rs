@@ -4,3 +4,4 @@
 pub mod pipeline;
 pub mod logging;
 mod pipeline_thread_orchestrator;
+mod pipeline_graph;

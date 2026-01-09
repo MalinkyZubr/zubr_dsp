@@ -1,5 +1,5 @@
 use crate::pipeline::api::ODFormat;
-use crate::pipeline::communication_layer::comms_core::WrappedReceiver;
+use crate::pipeline::communication_layer::comms_core::{ChannelMetadata, WithChannelMetadata, WrappedReceiver};
 use crate::pipeline::interfaces::ReceiveType;
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpmc::{RecvTimeoutError, SendError};
@@ -126,6 +126,12 @@ impl<T: Sharable> MultichannelReceiver<T> {
     }
 }
 
+impl<T: Sharable> WithChannelMetadata for MultichannelReceiver<T> {
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata> {
+        self.receivers.iter().map(|receiver| receiver.get_channel_metadata().clone()).collect()
+    }
+}
+
 #[derive(Debug)]
 pub struct Reassembler<T: Sharable> {
     receiver: WrappedReceiver<T>,
@@ -159,5 +165,12 @@ impl<T: Sharable> Reassembler<T> {
         }
 
         Ok(ReceiveType::Reassembled(receive_vec))
+    }
+}
+
+
+impl<T: Sharable> WithChannelMetadata for Reassembler<T> {
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata> {
+        vec![self.receiver.get_channel_metadata().clone()]
     }
 }

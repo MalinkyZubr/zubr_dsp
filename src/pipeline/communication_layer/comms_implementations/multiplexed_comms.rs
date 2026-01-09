@@ -1,5 +1,5 @@
 use crate::pipeline::api::ODFormat;
-use crate::pipeline::communication_layer::comms_core::WrappedReceiver;
+use crate::pipeline::communication_layer::comms_core::{ChannelMetadata, WithChannelMetadata, WrappedReceiver};
 use crate::pipeline::interfaces::ReceiveType;
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -108,5 +108,11 @@ impl<T: Sharable> Demultiplexer<T> {
     }
     pub fn add_receiver(&mut self, receiver: WrappedReceiver<T>) {
         self.receivers.push(receiver);
+    }
+}
+
+impl<T: Sharable> WithChannelMetadata for Demultiplexer<T> {
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata> {
+        self.receivers.iter().map(|receiver| receiver.get_channel_metadata().clone()).collect()
     }
 }

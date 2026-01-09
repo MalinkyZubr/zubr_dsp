@@ -10,6 +10,7 @@ use crate::pipeline::communication_layer::comms_implementations::multiplexed_com
 use crate::pipeline::interfaces::{ODFormat, ReceiveType};
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpsc::{RecvTimeoutError, SendError};
+use crate::pipeline::communication_layer::comms_core::{ChannelMetadata, WithChannelMetadata};
 
 #[derive(Debug)]
 pub enum NodeReceiver<I: Sharable> {
@@ -27,6 +28,26 @@ impl<I: Sharable> NodeReceiver<I> {
             NodeReceiver::REA(receiver) => receiver.receive(),
             NodeReceiver::DMI(receiver) => receiver.receive(),
             NodeReceiver::Dummy => Ok(ReceiveType::Dummy),
+        }
+    }
+    
+    pub fn to_generic(self) -> Box<dyn WithChannelMetadata>{
+        match self {
+            NodeReceiver::SI(receiver) => Box::new(receiver) as Box<dyn WithChannelMetadata>,
+            NodeReceiver::MI(receiver) => Box::new(receiver) as Box<dyn WithChannelMetadata>,
+            NodeReceiver::REA(receiver) => Box::new(receiver) as Box<dyn WithChannelMetadata>,
+            NodeReceiver::DMI(receiver) => Box::new(receiver) as Box<dyn WithChannelMetadata>,
+            NodeReceiver::Dummy => panic!("Problemo with channelo metadatao"),
+        }
+    }
+    
+    pub fn get_metadata(&self) -> Vec<ChannelMetadata> {
+        match self {
+            NodeReceiver::SI(receiver) => receiver.get_channel_metadata(),
+            NodeReceiver::MI(receiver) => receiver.get_channel_metadata(),
+            NodeReceiver::REA(receiver) => receiver.get_channel_metadata(),
+            NodeReceiver::DMI(receiver) => receiver.get_channel_metadata(),
+            NodeReceiver::Dummy => vec![],
         }
     }
 }

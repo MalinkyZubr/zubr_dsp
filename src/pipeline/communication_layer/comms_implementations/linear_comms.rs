@@ -1,5 +1,5 @@
 use crate::pipeline::api::ODFormat;
-use crate::pipeline::communication_layer::comms_core::WrappedReceiver;
+use crate::pipeline::communication_layer::comms_core::{ChannelMetadata, WithChannelMetadata, WrappedReceiver};
 use crate::pipeline::interfaces::ReceiveType;
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpmc::{RecvTimeoutError, SendError};
@@ -67,5 +67,12 @@ impl<T: Sharable> SingleReceiver<T> {
     }
     pub fn extract_receiver(self) -> WrappedReceiver<T> {
         self.receiver
+    }
+}
+
+
+impl<T: Sharable> WithChannelMetadata for SingleReceiver<T> {
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata> {
+        vec![self.receiver.get_channel_metadata().clone()]
     }
 }

@@ -9,9 +9,13 @@ use crate::pipeline::threading_layer::thread_state_space::ThreadStateSpace;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::RecvTimeoutError;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use crate::pipeline::communication_layer::comms_core::ChannelMetadata;
+use crate::pipeline::communication_layer::comms_top_level::NodeReceiver;
 
 struct ThreadErrorCounter {
     max_infrastructure_errors: usize,
@@ -255,14 +259,13 @@ impl ThreadStateMachine {
 }
 
 pub struct PipelineThread<I: Sharable, O: Sharable> {
-    pub execution_time: u64,
-    pub return_code: PipelineStepResult,
+    pub execution_time: AtomicU64,
+    pub return_code: AtomicU64,
     pub id: String,
 
-    thread_state_machine: ThreadStateMachine,
-
-    step: Box<dyn PipelineStep<I, O>>,
-    node: PipelineNode<I, O>,
+    thread_state_machine: Mutex<ThreadStateMachine>,
+    step: Mutex<Box<dyn PipelineStep<I, O>>>,
+    node: Mutex<PipelineNode<I, O>>,
 }
 
 impl<I: Sharable, O: Sharable> PipelineThread<I, O> {
@@ -274,25 +277,27 @@ impl<I: Sharable, O: Sharable> PipelineThread<I, O> {
         // requires node to be borrowed as static?
         let id = node.get_id();
         let mut thread = PipelineThread {
-            execution_time: 0,
-            return_code: PipelineStepResult::Success,
+            execution_time: AtomicU64::new(0),
+            return_code: AtomicU64::new(0),
             id: node.get_id(),
-            node,
-            step: Box::new(step),
-            thread_state_machine: ThreadStateMachine::new(&parameters, id),
+            node: Mutex::new(node),
+            step: Mutex::new(Box::new(step)),
+            thread_state_machine: Mutex::new(ThreadStateMachine::new(&parameters, id)),
         };
 
         thread
     }
 
     pub fn request_state_change(&mut self, requested_state: ThreadStateSpace) {
-        self.thread_state_machine
-            .state_transition(requested_state, &mut self.step);
+        // self.thread_state_machine
+        //     .state_transition(requested_state, &mut self.step);
     }
 }
 
 pub trait CollectibleThread: Send {
     fn call_thread(&mut self);
+    fn get_id(&self) -> String;
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata>;
 }
 
 impl<I: Sharable, O: Sharable> CollectibleThread for PipelineThread<I, O> {
@@ -321,5 +326,13 @@ impl<I: Sharable, O: Sharable> CollectibleThread for PipelineThread<I, O> {
             format!("ThreadID: {} state machine end of action loop", self.id),
             Level::Trace,
         );
+    }
+    
+    fn get_id(&self) -> String {
+        self.id.clone()
+    }
+
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata> {
+        self.node.lock().unwrap().get_metadata()
     }
 }

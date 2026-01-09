@@ -2,9 +2,10 @@
 // format adapters were designed for a previous (invalid) understanding of how some DSP algorithms worked. They only create latency
 // type adapters (primarily modulators) are much more important and baked directly into a proper DSP pipeline for radio transmission and reception
 
+use std::collections::HashMap;
 use crate::pipeline::orchestration_layer::logging::log_message;
 use crate::pipeline::orchestration_layer::logging::Level;
-use crate::pipeline::threading_layer::pipeline_thread::PipelineThread;
+use crate::pipeline::threading_layer::pipeline_thread::{CollectibleThread, PipelineThread};
 use crate::pipeline::threading_layer::thread_state_space::ThreadStateSpace;
 use crossbeam_queue::SegQueue;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -14,9 +15,11 @@ use std::sync::Arc;
 //use super::dummy::{dummy_thread_function, DummyManager, DummyRunner};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
+use futures::stream::Collect;
 //use crate::frontend::curses::app::{App, AppBuilder};
 
-pub type ConstructionQueue = Arc<SegQueue<PipelineThread>>;
+pub type ConstructionQueue = Arc<SegQueue<Box<dyn CollectibleThread>>>;
+
 
 #[derive(Clone)]
 pub struct PipelineParameters {
@@ -195,10 +198,11 @@ impl ConstructingPipeline {
         self.nodes.clone()
     }
     pub fn finish_pipeline(mut self) -> ActivePipeline {
-        let mut static_nodes = Vec::with_capacity(self.nodes.len());
+        let mut thread_hashmap: HashMap<String, Box<dyn CollectibleThread>> = HashMap::new();
 
         while self.nodes.len() > 0 {
-            static_nodes.push(self.nodes.pop().unwrap());
+            let node = self.nodes.pop().unwrap();
+            thread_hashmap.insert()
         }
 
         ActivePipeline {

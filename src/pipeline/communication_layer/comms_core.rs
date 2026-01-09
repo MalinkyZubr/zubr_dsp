@@ -1,24 +1,32 @@
-use crate::pipeline::api::HasDefault;
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpmc::RecvTimeoutError;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, SyncSender};
 use std::time::Duration;
+
+
+#[derive(Debug, Clone)]
+pub struct ChannelMetadata {
+    pub origin_id: String,
+    pub critical_channel: bool
+}
+impl ChannelMetadata {
+    pub fn new(origin_id: String, critical_channel: bool) -> Self {
+        ChannelMetadata { origin_id, critical_channel }
+    }
+}
+
 
 #[derive(Debug)]
 pub struct WrappedReceiver<T: Sharable> {
     receiver: Receiver<T>,
-    feedback_startup_flag: bool,
+    channel_metadata: ChannelMetadata
 }
-impl<T: Sharable + HasDefault> WrappedReceiver<T> {
-    pub fn new(receiver: Receiver<T>) -> Self {
+impl<T: Sharable> WrappedReceiver<T> {
+    pub fn new(receiver: Receiver<T>, channel_metadata: ChannelMetadata) -> Self {
         WrappedReceiver {
             receiver,
-            feedback_startup_flag: false,
+            channel_metadata
         }
-    }
-    pub fn set_startup_flag(mut self) -> Self {
-        self.feedback_startup_flag = true;
-        self
     }
     fn result_handler(
         &self,
@@ -48,11 +56,24 @@ impl<T: Sharable + HasDefault> WrappedReceiver<T> {
 
             success_flag = self.result_handler(&mut result, &mut retry_num, retries);
         }
-        if self.feedback_startup_flag {
-            self.feedback_startup_flag = false;
-            Ok(T::default())
-        } else {
-            result
-        }
+        result
     }
+    
+    pub fn get_channel_metadata(&self) -> &ChannelMetadata {
+        &self.channel_metadata
+    }
+}
+
+
+pub trait WithChannelMetadata {
+    fn get_channel_metadata(&self) -> Vec<ChannelMetadata>;
+}
+
+
+pub fn channel_wrapped<T: Sharable>(buffer_size: usize, channel_metadata: ChannelMetadata) -> (SyncSender<T>, WrappedReceiver<T>) {
+    if buffer_size == 0 {
+        panic!("Buffer size must be greater than 0");
+    }
+    let (sender, receiver) = std::sync::mpsc::sync_channel(buffer_size);
+    (sender, WrappedReceiver::new(receiver, channel_metadata))
 }

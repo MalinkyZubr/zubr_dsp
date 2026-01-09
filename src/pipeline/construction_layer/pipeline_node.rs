@@ -6,6 +6,8 @@ use crossbeam_queue::ArrayQueue;
 use std::fmt::Debug;
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::Arc;
+use std::collections::HashMap;
+use crate::pipeline::communication_layer::comms_core::ChannelMetadata;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum PipelineStepResult {
@@ -27,7 +29,7 @@ pub struct PipelineNode<I: Sharable, O: Sharable> {
     pub input: NodeReceiver<I>,
     pub output: NodeSender<O>,
     pub id: String,
-    tap: Option<Arc<ArrayQueue<ODFormat<O>>>>,
+    pub tap: Option<Arc<ArrayQueue<ODFormat<O>>>>,
 }
 
 impl<I: Sharable, O: Sharable> HasID for PipelineNode<I, O> {
@@ -108,5 +110,9 @@ impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
             (ReceiveType::Single(t), NodeSender::Dummy) => step.run_SIDO(t),
             (_, _) => Err(String::from("Received bad message from pipeline step")),
         })
+    }
+    
+    pub fn get_metadata(&self) -> Vec<ChannelMetadata> {
+        self.input.get_metadata()
     }
 }
