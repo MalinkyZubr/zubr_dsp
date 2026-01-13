@@ -83,4 +83,8 @@ impl PipelineAdjacencyMap {
         
         sources
     }
+    
+    pub fn get(&self, id: &String) -> &PipelineAdjacencyNode {
+        &self.adjacency_map[id]
+    }
 }
