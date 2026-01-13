@@ -5,6 +5,13 @@ use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpmc::{RecvTimeoutError, SendError};
 use std::sync::mpsc::SyncSender;
 
+
+pub enum ChannelDesyncPolicy {
+    CRITICAL,
+    BESTEFFORT,
+}
+
+
 pub struct MultichannelSender<T: Sharable> {
     senders: Vec<SyncSender<T>>,
 }

@@ -22,6 +22,10 @@ impl PipelineAdjacencyNode {
             num_executions_to_complete: Arc::new(0) // needs to be derived from the channel metadata somehow
         }
     }
+    
+    pub fn is_source(&self) -> bool {
+        self.predecessors.len() == 0
+    }
 }
 
 
@@ -66,5 +70,17 @@ impl PipelineAdjacencyMap {
             }
         }
         true
+    }
+    
+    pub fn get_all_sources(&self) -> Vec<String> {
+        let mut sources: Vec<String> = Vec::new();
+        
+        for (thread_id, thread_obj) in self.adjacency_map.iter() {
+            if thread_obj.is_source() {
+                sources.push(thread_id.clone());
+            }
+        }
+        
+        sources
     }
 }

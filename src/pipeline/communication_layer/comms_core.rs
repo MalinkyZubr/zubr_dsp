@@ -1,7 +1,16 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpmc::RecvTimeoutError;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::time::Duration;
+
+
+pub enum ChannelState {
+    ERROR=2,
+    STOPPED=1,
+    OKAY=0
+}
 
 
 #[derive(Debug, Clone)]
@@ -16,10 +25,23 @@ impl ChannelMetadata {
 }
 
 
+pub struct DataPacket<T: Sharable> {
+    data: T,
+    epoch: usize, // may want to solve ovf problem later with tens of thousands of samples per second. But for now wont worry
+}
+
+
+pub struct WrappedSender<T: Sharable> {
+    sender: SyncSender<T>,
+    channel_state: Arc<AtomicUsize>
+}
+
+
 #[derive(Debug)]
 pub struct WrappedReceiver<T: Sharable> {
     receiver: Receiver<T>,
-    channel_metadata: ChannelMetadata
+    channel_metadata: ChannelMetadata,
+    channel_state: Arc<AtomicUsize>
 }
 impl<T: Sharable> WrappedReceiver<T> {
     pub fn new(receiver: Receiver<T>, channel_metadata: ChannelMetadata) -> Self {

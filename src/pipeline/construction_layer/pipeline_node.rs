@@ -7,7 +7,8 @@ use std::fmt::Debug;
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::Arc;
 use std::collections::HashMap;
-use crate::pipeline::communication_layer::comms_core::ChannelMetadata;
+use crate::pipeline::communication_layer::comms_core::{ChannelMetadata, ChannelState};
+use crate::pipeline::communication_layer::comms_core::ChannelState::OKAY;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum PipelineStepResult {
@@ -25,11 +26,21 @@ impl<T: Sharable> PipelineStep<T, T> for DummyStep {
     }
 }
 
+
+pub struct NodeStatus {
+    num_executions: usize,
+    avg_execution_time_ns: usize,
+    node_return_code: PipelineStepResult,
+    node_state: ChannelState
+}
+
+
 pub struct PipelineNode<I: Sharable, O: Sharable> {
-    pub input: NodeReceiver<I>,
-    pub output: NodeSender<O>,
-    pub id: String,
-    pub tap: Option<Arc<ArrayQueue<ODFormat<O>>>>,
+    input: NodeReceiver<I>,
+    output: NodeSender<O>,
+    id: String,
+    tap: Option<Arc<ArrayQueue<ODFormat<O>>>>,
+    node_status: NodeStatus
 }
 
 impl<I: Sharable, O: Sharable> HasID for PipelineNode<I, O> {
@@ -53,6 +64,12 @@ impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
     }
 
     pub fn call(&mut self, step: &mut Box<dyn PipelineStep<I, O>>) -> PipelineStepResult {
+        match self.node_status.node_state {
+            ChannelState::OKAY => {
+                
+            }
+                
+        }
         let received_result = self.input.receive();
         match received_result {
             Err(err) => {
@@ -94,7 +111,7 @@ impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
         input_data: ReceiveType<I>,
         step: &mut Box<dyn PipelineStep<I, O>>,
     ) -> PipelineStepResult {
-        //log_message(format!("CRITICAL: NodeID: {}, Received message: {}", &self.id, &input_data), Level::Debug);
+        // This method decides based on the connections to and from this node which computation method should be run
         self.compute_handler(match (input_data, &self.output) {
             (ReceiveType::Single(t), NodeSender::SO(_) | NodeSender::MUO(_)) => step.run_SISO(t),
             (ReceiveType::Single(t), NodeSender::MO(_)) => step.run_SIMO(t),

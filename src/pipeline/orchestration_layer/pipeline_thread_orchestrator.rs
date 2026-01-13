@@ -33,7 +33,6 @@ pub struct PipelineThreadOrchestrator {
     max_executing: usize,
     current_executing: Arc<AtomicUsize>,
     current_head: usize,
-    global_finish_condition: (Sender<()>, Receiver<()>),
 }
 impl PipelineThreadOrchestrator {
     pub fn new(
@@ -55,7 +54,6 @@ impl PipelineThreadOrchestrator {
             max_executing,
             current_executing: Arc::new(AtomicUsize::new(0)),
             current_head: 0,
-            global_finish_condition: notification_channel,
         }
     }
     
@@ -66,18 +64,25 @@ impl PipelineThreadOrchestrator {
                 let adjacency_node: &PipelineAdjacencyNode = *adj_map_clone[thread_id];
                 *adjacency_node.thread_object.lock().unwrap().call_thread();
                 
-                *adjacency_node.num_executions_since_completion += 1
+                *adjacency_node.num_executions_since_completion += 1;
                 
-                if adj_map_clone.check_dependencies_satisfied(adjacency_node.)
+                for successor_id in *adjacency_node.successors {
+                    if adj_map_clone.check_dependencies_satisfied(successor_id) {
+                        rayon::scope(|s| s.spawn(|| self.dispatch_thread_to_pool(successor_id)));
+                    }
+                }
+                if adjacency_node.is_source() {
+                    rayon::scope(|s| s.spawn(|| self.dispatch_thread_to_pool(thread_id)));
+                }
             }
         )
     }
     
-    pub async fn start_pipeline(&mut self) {
-        // you need to run only the first node
-        // rules for pipeline: 
-        //      No source, submit itself and successor(s) to thread pool. use atomics
-        //      otherwise, just check successor for completion and submit it to thread pool
-        //      
+    pub fn start_pipeline(&mut self) { // start all sources
+        for id in *self.thread_adjacency_map.get_all_sources() {
+            self.dispatch_thread_to_pool(id);
+        }
     }
+    
+    pub fn 
 }

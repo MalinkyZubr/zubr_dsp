@@ -26,4 +26,9 @@ now with this in mind. How is the pipeline construction modified?
 
 # On determining whether a node should be run or not given proper ordering
 * the main dispatcher must be running in a loop to reduce latency
-* 
+
+* what is the current problem with the communication model?
+  * total separation of concern from communication primatives and nodes 
+  prevents error based flow control and safe, simple packetization of data
+  * I needa  way to bundle data safety guarantees to make administration and error recovery more graceful
+  * maintain separation of concerns. When creating new node contract enum or struct must be passed to determine communication behavior
