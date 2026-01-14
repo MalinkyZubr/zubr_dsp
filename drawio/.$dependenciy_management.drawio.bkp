@@ -265,7 +265,7 @@
           <mxGeometry y="150" width="320" height="30" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-85" value="Start/Stop operation" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry y="830" width="1180" height="720" as="geometry" />
+          <mxGeometry y="840" width="1180" height="820" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-115" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-86" target="dNdipavD93NEJ4wBI0iY-114">
           <mxGeometry relative="1" as="geometry" />
@@ -276,22 +276,25 @@
         <mxCell id="dNdipavD93NEJ4wBI0iY-140" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-107" target="dNdipavD93NEJ4wBI0iY-139">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-107" value="stop is called for a source" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-107" value="stop is called for a source. Requested state is stopped" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="20" y="320" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-150" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-108" target="dNdipavD93NEJ4wBI0iY-148">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-108" value="start is called for a sink" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-108" value="start is called for a sink. Set requested state start" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="20" y="450" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-109" value="start is called for a source" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
-          <mxGeometry x="20" y="570" width="120" height="60" as="geometry" />
+        <mxCell id="dNdipavD93NEJ4wBI0iY-162" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-109" target="dNdipavD93NEJ4wBI0iY-161">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-109" value="start is called for a source. Set requested state start" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="20" y="700" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-126" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-114" target="dNdipavD93NEJ4wBI0iY-118">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-114" value="bfs all source edges" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-114" value="dfs all source edges" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="220" y="50" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-128" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-118" target="dNdipavD93NEJ4wBI0iY-127">
@@ -324,25 +327,24 @@
         <mxCell id="dNdipavD93NEJ4wBI0iY-127" value="Are all the sinks associated with the split stopped?" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="410" y="190" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-136" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-130" target="dNdipavD93NEJ4wBI0iY-135">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="dNdipavD93NEJ4wBI0iY-136" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-130" target="dNdipavD93NEJ4wBI0iY-137">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="800" y="80" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-130" value="append to the stop list" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="630" y="50" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-138" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-135" target="dNdipavD93NEJ4wBI0iY-137">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-156" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-137" target="dNdipavD93NEJ4wBI0iY-155">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-135" value="Reverse the list&amp;nbsp;" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
-          <mxGeometry x="800" y="50" width="120" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-137" value="set the stop flag for all nodes" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
-          <mxGeometry x="980" y="50" width="120" height="60" as="geometry" />
+        <mxCell id="dNdipavD93NEJ4wBI0iY-137" value="set the stop flag for all nodes, starting from sources" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="820" y="50" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-142" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-139" target="dNdipavD93NEJ4wBI0iY-141">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-139" value="BFS over the dest edges" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-139" value="DFS over the dest edges" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="220" y="320" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-145" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-141" target="dNdipavD93NEJ4wBI0iY-144">
@@ -356,19 +358,140 @@
           <mxGeometry x="410" y="320" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-147" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-144" target="dNdipavD93NEJ4wBI0iY-86">
-          <mxGeometry relative="1" as="geometry" />
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="150" />
+              <mxPoint x="120" y="150" />
+            </Array>
+          </mxGeometry>
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-144" value="For every sink in the list" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
-          <mxGeometry x="20" y="220" width="120" height="60" as="geometry" />
+          <mxGeometry x="190" y="220" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-152" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-148" target="dNdipavD93NEJ4wBI0iY-151">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="dNdipavD93NEJ4wBI0iY-174" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-148" target="dNdipavD93NEJ4wBI0iY-151">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="410" y="480" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-148" value="bfs all source edges" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-148" value="dfs all source edges" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="220" y="450" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-151" value="" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-176" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-151" target="dNdipavD93NEJ4wBI0iY-175">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-151" value="append to start list" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
           <mxGeometry x="410" y="450" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-155" value="if multiple (if stop called on source), round robin from each path to stop" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="820" y="190" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-208" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-159" target="dNdipavD93NEJ4wBI0iY-207">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-159" value="call start on all nodes" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="830" y="450" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-186" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-161" target="dNdipavD93NEJ4wBI0iY-165">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-161" value="dfs over all dest edges" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="220" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-168" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-165" target="dNdipavD93NEJ4wBI0iY-167">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-169" value="yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="dNdipavD93NEJ4wBI0iY-168">
+          <mxGeometry y="2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-190" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-165" target="dNdipavD93NEJ4wBI0iY-189">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-191" value="no" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="dNdipavD93NEJ4wBI0iY-190">
+          <mxGeometry x="-0.125" y="1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-165" value="is the dest edge leading into a joint?" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="410" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-188" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-167" target="dNdipavD93NEJ4wBI0iY-187">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-167" value="dfs over all source edges" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="410" y="570" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-178" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-175" target="dNdipavD93NEJ4wBI0iY-159">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="810" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-179" value="yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="dNdipavD93NEJ4wBI0iY-178">
+          <mxGeometry x="-0.1429" y="-1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-175" value="are all sources request state set to start?" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="610" y="450" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-185" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-184" target="dNdipavD93NEJ4wBI0iY-86">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-184" value="Set requested state of sink to stopped" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="20" y="220" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-198" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-187" target="dNdipavD93NEJ4wBI0iY-197">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-187" value="append to start list" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="610" y="570" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-203" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-189" target="dNdipavD93NEJ4wBI0iY-202">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-189" value="append to list" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="610" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-200" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-197" target="dNdipavD93NEJ4wBI0iY-199">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-201" value="No" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="dNdipavD93NEJ4wBI0iY-200">
+          <mxGeometry x="0.05" y="1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-197" value="are all sources request state set to start?" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="810" y="570" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-199" value="End" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="1010" y="570" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-205" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-202" target="dNdipavD93NEJ4wBI0iY-204">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-206" value="Yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="dNdipavD93NEJ4wBI0iY-205">
+          <mxGeometry x="-0.175" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-202" value="are all sinks dependent on the source request state start?" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="810" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-209" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="dNdipavD93NEJ4wBI0iY-85" source="dNdipavD93NEJ4wBI0iY-204" target="dNdipavD93NEJ4wBI0iY-207">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="780" />
+              <mxPoint x="1220" y="780" />
+              <mxPoint x="1220" y="480" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-204" value="Start all nodes" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="1010" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-207" value="append all newly activated nodes to the thread pool" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-85">
+          <mxGeometry x="1010" y="450" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-102" value="A link can only be non critical if all the sinks that depend on it are declared as noncritical. only sinks need to know if they are critical" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry y="1810" width="150" height="90" as="geometry" />
@@ -377,7 +500,7 @@
           <mxGeometry y="1900" width="150" height="90" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-110" value="Error Correction" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="150" y="1550" width="1030" height="440" as="geometry" />
+          <mxGeometry x="170" y="1740" width="1030" height="440" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-113" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-110" source="dNdipavD93NEJ4wBI0iY-111" target="dNdipavD93NEJ4wBI0iY-112">
           <mxGeometry relative="1" as="geometry" />
@@ -387,6 +510,9 @@
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-112" value="" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
           <mxGeometry x="220" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-172" value="Sources and sinks need separate &quot;requested state&quot; fields. If you can order either end to stop, but they can also be told to stop by other parts of the pipeline, need to re-enable automatically when conditions are correct" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="830" width="250" height="200" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
