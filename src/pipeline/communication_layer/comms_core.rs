@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use crate::pipeline::pipeline_traits::Sharable;
@@ -6,10 +7,20 @@ use std::sync::mpsc::{Receiver, SyncSender};
 use std::time::Duration;
 
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ChannelState {
     ERROR=2,
     STOPPED=1,
     OKAY=0
+}
+impl Display for ChannelState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChannelState::ERROR => write!(f, "ERROR"),
+            ChannelState::STOPPED => write!(f, "STOPPED"),
+            ChannelState::OKAY => write!(f, "OKAY"),
+        }
+    }
 }
 
 

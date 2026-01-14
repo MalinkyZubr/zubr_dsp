@@ -5,9 +5,6 @@ use crate::pipeline::communication_layer::comms_implementations::linear_comms::{
 use crate::pipeline::communication_layer::comms_implementations::multichannel_comms::{
     MultichannelReceiver, MultichannelSender, Reassembler,
 };
-use crate::pipeline::communication_layer::comms_implementations::multiplexed_comms::{
-    Demultiplexer, Multiplexer,
-};
 use crate::pipeline::communication_layer::comms_top_level::{NodeReceiver, NodeSender};
 use crate::pipeline::interfaces::PipelineStep;
 use crate::pipeline::orchestration_layer::pipeline::ConstructionQueue;
@@ -15,14 +12,13 @@ use crate::pipeline::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
 use std::sync::atomic::{AtomicU8, AtomicUsize};
 use std::sync::{mpsc, Arc};
 use std::sync::mpmc::channel;
-use crate::pipeline::api::{ConstructingPipeline, PipelineParameters, PipelineThread, ThreadStateSpace};
+use crate::pipeline::api::{ConstructingPipeline, PipelineParameters};
 use crate::pipeline::construction_layer::pipeline_node::PipelineNode;
 
 pub struct NodeBuilder<I: Sharable, O: Sharable> {
     node: PipelineNode<I, O>,
     construction_queue: ConstructionQueue,
     parameters: PipelineParameters,
-    state: (Arc<AtomicU8>, mpsc::Sender<ThreadStateSpace>),
 }
 impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
     pub fn attach<F: Sharable>(
