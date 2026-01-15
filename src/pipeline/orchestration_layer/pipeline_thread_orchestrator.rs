@@ -3,7 +3,7 @@
 use crate::pipeline::orchestration_layer::pipeline_graph::{
     PipelineAdjacencyMap, PipelineAdjacencyNode,
 };
-use crate::pipeline::orchestration_layer::thread_pool::{
+use crate::pipeline::orchestration_layer::all_buffer_ws::{
     StaticThreadPoolTopographical, StaticThreadTaskTopographical,
 };
 use crossterm::ExecutableCommand;
@@ -64,11 +64,11 @@ impl PipelineThreadOrchestrator {
             initial_submitter.submit(node);
         }
     }
-    
+
     pub fn stop_pipeline(&mut self) {
         self.thread_pool.shutdown();
     }
-    
+
     pub fn get_num_nodes(&self) -> usize {
         self.num_nodes
     }

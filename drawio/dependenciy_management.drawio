@@ -217,7 +217,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-65" value="Adjacency Map: Arc&amp;lt;HashMap&amp;lt;String, AdjacencyNode&amp;gt;&amp;gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-65" value="Adjacency Map: Arc&amp;lt;Vec&amp;lt;AdjacencyNode&amp;gt;&amp;gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="1560" y="160" width="200" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-76" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="dNdipavD93NEJ4wBI0iY-67" target="dNdipavD93NEJ4wBI0iY-65">
@@ -543,6 +543,12 @@
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-221" value="should also show compute latency" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="1200" y="740" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-222" value="Backpressure system" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="1060" width="850" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-223" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-222">
+          <mxGeometry y="20" width="230" height="500" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

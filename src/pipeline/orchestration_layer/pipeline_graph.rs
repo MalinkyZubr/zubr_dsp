@@ -1,23 +1,21 @@
-use crate::pipeline::construction_layer::pipeline_node::CollectibleThread;
-use collections::HashMap;
+use crate::pipeline::construction_layer::pipeline_node::{CollectibleThread, PipelineNode};
 use std::collections;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 
 pub struct PipelineAdjacencyEdge {
-    source: Arc<PipelineAdjacencyNode>,
-    destination: Arc<PipelineAdjacencyNode>,
-    num_executions_since_completion: AtomicU64,
-    num_executions_to_complete: u64,
+    pub source_id: usize,
+    pub destination_id: usize,
+    pub num_executions_since_completion: AtomicU64,
+    pub num_executions_to_complete: u64,
 }
 
 
 pub struct PipelineAdjacencyNode {
-    pub predecessors: Vec<Arc<PipelineAdjacencyNode>>,
-    pub successors: Vec<Arc<PipelineAdjacencyNode>>,
-    pub thread_object: Mutex<Box<dyn CollectibleThread>>,
-    is_running: 
+    pub predecessors: Vec<PipelineAdjacencyEdge>,
+    pub successors: Vec<PipelineAdjacencyEdge>,
+    pub thread_object: Mutex<dyn CollectibleThread>,
 }
 impl PipelineAdjacencyNode {
     pub fn new(thread_object: Mutex<Box<dyn CollectibleThread>>) -> Self {
@@ -29,8 +27,6 @@ impl PipelineAdjacencyNode {
                 .collect(),
             successors: Vec::new(),
             thread_object,
-            num_executions_since_completion: Arc::new(AtomicU64::new(0)),
-            num_executions_to_complete: Arc::new(0), // needs to be derived from the channel metadata somehow
         }
     }
     
@@ -66,10 +62,10 @@ impl PipelineAdjacencyNode {
     }
 }
 
-pub struct PipelineAdjacencyMap {
-    adjacency_map: HashMap<String, Arc<PipelineAdjacencyNode>>,
+pub struct PipelineGraph {
+    adjacency_list: Arc<Vec<Arc<PipelineAdjacencyNode>>>,
 }
-impl PipelineAdjacencyMap {
+impl PipelineGraph {
     fn construct_partial_downstream(
         collectible_thread_vector: Vec<Box<dyn CollectibleThread>>,
     ) -> HashMap<String, Arc<PipelineAdjacencyNode>> {
@@ -135,5 +131,9 @@ impl PipelineAdjacencyMap {
         }
 
         sources
+    }
+    
+    pub fn get_node(&self, node_id: usize) -> Arc<PipelineAdjacencyNode> {
+        self.adjacency_list[node_id].clone()
     }
 }

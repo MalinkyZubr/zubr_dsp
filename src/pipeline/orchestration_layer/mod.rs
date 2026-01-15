@@ -7,3 +7,4 @@ mod pipeline_thread_orchestrator;
 mod pipeline_graph;
 mod thread_pool;
 mod thread_pool;
+mod thread_pool_models;
