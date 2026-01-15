@@ -500,7 +500,7 @@
           <mxGeometry y="1900" width="150" height="90" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-110" value="Error Correction" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="170" y="1740" width="1030" height="440" as="geometry" />
+          <mxGeometry x="170" y="1740" width="1030" height="250" as="geometry" />
         </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-113" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-110" source="dNdipavD93NEJ4wBI0iY-111" target="dNdipavD93NEJ4wBI0iY-112">
           <mxGeometry relative="1" as="geometry" />
@@ -508,11 +508,41 @@
         <mxCell id="dNdipavD93NEJ4wBI0iY-111" value="Error Occurs on a node" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
           <mxGeometry x="20" y="40" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-112" value="" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-211" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-110" source="dNdipavD93NEJ4wBI0iY-112" target="dNdipavD93NEJ4wBI0iY-210">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-112" value="log to logging system" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
           <mxGeometry x="220" y="40" width="120" height="60" as="geometry" />
         </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-213" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-110" source="dNdipavD93NEJ4wBI0iY-210" target="dNdipavD93NEJ4wBI0iY-212">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-210" value="identify all connected nodes" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
+          <mxGeometry x="420" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-212" value="put all connected nodes in stop state" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
+          <mxGeometry x="620" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-219" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-110" source="dNdipavD93NEJ4wBI0iY-217" target="dNdipavD93NEJ4wBI0iY-218">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-217" value="hard reset called" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
+          <mxGeometry x="20" y="150" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-218" value="call &quot;reset&quot; method on all nodes (trait), which should clear all context, reset all variables, etc" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-110">
+          <mxGeometry x="220" y="140" width="120" height="80" as="geometry" />
+        </mxCell>
         <mxCell id="dNdipavD93NEJ4wBI0iY-172" value="Sources and sinks need separate &quot;requested state&quot; fields. If you can order either end to stop, but they can also be told to stop by other parts of the pipeline, need to re-enable automatically when conditions are correct" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="1200" y="830" width="250" height="200" as="geometry" />
+          <mxGeometry x="1200" y="840" width="250" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-214" value="need to enforce unique id&#39;s/names" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry y="1990" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-220" value="Backpressure depends on the time between starts of a node. Start of iteration n-1, n" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="770" width="250" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-221" value="should also show compute latency" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="740" width="250" height="20" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
