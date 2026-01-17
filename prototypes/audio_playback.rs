@@ -111,7 +111,7 @@ fn symphonia_version(filename: &str) {
 
 fn main() {
     dbg!("start playback");
-    symphonia_version("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/tests/kolotest.mp3");
+    symphonia_version("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/pipeline/kolotest.mp3");
     
     dbg!("done playback");
 }

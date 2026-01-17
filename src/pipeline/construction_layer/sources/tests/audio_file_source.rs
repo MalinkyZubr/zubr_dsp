@@ -8,7 +8,7 @@ mod audio_file_source_tests {
     #[test]
     pub fn test_audio_file_source_interleaved() {
         let start = std::time::Instant::now();
-        let mut file_source = AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/tests/kolotest.mp3", 1025, 3);
+        let mut file_source = AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/pipeline/kolotest.mp3", 1025, 3);
         let samples = file_source.run_DISO();
         
         let mut num_samples = 0;

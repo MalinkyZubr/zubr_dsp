@@ -1,5 +1,3 @@
-mod tests;
-
 pub mod api;
 mod communication_layer;
 mod threading_layer;

@@ -547,8 +547,20 @@
         <mxCell id="dNdipavD93NEJ4wBI0iY-222" value="Backpressure system" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="1200" y="1060" width="850" height="520" as="geometry" />
         </mxCell>
-        <mxCell id="dNdipavD93NEJ4wBI0iY-223" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-222">
+        <mxCell id="dNdipavD93NEJ4wBI0iY-223" value="Must prevent unbound growth" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-222">
           <mxGeometry y="20" width="230" height="500" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-224" value="High level scheduling" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="480" width="730" height="550" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-227" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="dNdipavD93NEJ4wBI0iY-224" source="dNdipavD93NEJ4wBI0iY-225" target="dNdipavD93NEJ4wBI0iY-226">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-225" value="&quot;CPU Bound&quot; node: Rayon Thread pool" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-224">
+          <mxGeometry x="20" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dNdipavD93NEJ4wBI0iY-226" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="dNdipavD93NEJ4wBI0iY-224">
+          <mxGeometry x="20" y="150" width="120" height="60" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

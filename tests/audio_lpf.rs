@@ -51,7 +51,7 @@ mod end_to_end_tests {
 
         NodeBuilder::start_pipeline(
             "test audio source",
-            AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/tests/starstest.wav", 2048, 3),
+            AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/pipeline/starstest.wav", 2048, 3),
             &mut pipeline)
             .attach("convolution", DiscreteConvolution::new(2048, lpf_impulse_resp_norm.len(), Some(lpf_impulse_resp_norm)))
         .cap_pipeline(
