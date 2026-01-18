@@ -24,24 +24,6 @@ impl Display for ChannelState {
 }
 
 
-#[derive(Debug, Clone)]
-pub struct ChannelMetadata {
-    pub origin_id: String,
-    pub critical_channel: bool
-}
-impl ChannelMetadata {
-    pub fn new(origin_id: String, critical_channel: bool) -> Self {
-        ChannelMetadata { origin_id, critical_channel }
-    }
-}
-
-
-pub struct DataPacket<T: Sharable> {
-    data: T,
-    epoch: usize, // may want to solve ovf problem later with tens of thousands of samples per second. But for now wont worry
-}
-
-
 pub struct WrappedSender<T: Sharable> {
     sender: SyncSender<T>,
     channel_state: Arc<AtomicUsize>
