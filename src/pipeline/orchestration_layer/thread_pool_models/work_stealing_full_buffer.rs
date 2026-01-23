@@ -1,9 +1,10 @@
 #![feature(mpmc_channel)]
 
-use crate::pipeline::orchestration_layer::pipeline_graph::{PipelineAdjacencyEdge, PipelineGraph};
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::atomic::AtomicBool;
+use rayon::{ThreadPoolBuilder, ThreadPool};
 use std::sync::Arc;
+use tokio::{task, runtime};
+use crate::pipeline::orchestration_layer::pipeline_graph::{PipelineGraph};
 
 pub trait ThreadTaskTopographical {
     fn execute(&mut self) -> (Vec<Arc<dyn ThreadTaskTopographical>>, bool);
@@ -12,11 +13,12 @@ pub trait ThreadTaskTopographical {
 pub struct ThreadPoolTopographical {
     num_threads: usize,
     thread_pool: Arc<ThreadPool>,
+    async_runtime: Arc<runtime::Runtime>,
     run_flag: Arc<AtomicBool>,
     graph: Arc<PipelineGraph>,
 }
 impl ThreadPoolTopographical {
-    pub fn new(num_thread: usize, graph: PipelineGraph) -> Self {
+    pub fn new(num_thread: usize) -> Self {
         if num_thread < 1 {
             // panic here
         }

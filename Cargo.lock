@@ -37,6 +37,7 @@ dependencies = [
  "symphonia",
  "systemstat",
  "thread-priority",
+ "tokio",
  "tracing",
  "tracing-error",
  "tracing-subscriber",
