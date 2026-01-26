@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, channel_wrapped, ChannelMetadata};
 use crate::pipeline::communication_layer::comms_implementations::linear_comms::{
     SingleReceiver, SingleSender,
@@ -15,6 +16,12 @@ use std::sync::mpmc::channel;
 use crate::pipeline::api::{ConstructingPipeline, PipelineParameters};
 use crate::pipeline::construction_layer::pipeline_node::PipelineNode;
 
+
+pub struct BuildingNode {
+    pub thread: Box<dyn CollectibleThread>,
+    pub id: usize,
+    pub successors: HashMap<usize, usize> // (id, num executions)
+}
 pub struct NodeBuilder<I: Sharable, O: Sharable> {
     node: PipelineNode<I, O>,
     construction_queue: ConstructionQueue,
@@ -400,90 +407,6 @@ impl<I: Sharable, O: Sharable> JointBuilder<I, O> {
             parameters: self.parameters.clone(),
             construction_queue: self.construction_queue.clone(),
             state: self.state.clone(),
-        }
-    }
-}
-
-pub struct MultiplexerBuilder<I: Sharable, O: Sharable> {
-    node: PipelineNode<I, O>,
-    construction_queue: ConstructionQueue,
-    parameters: PipelineParameters,
-    state: (Arc<AtomicU8>, mpsc::Sender<ThreadStateSpace>),
-}
-impl<I: Sharable, O: Sharable> MultiplexerBuilder<I, O> {
-    pub fn multiplexer_add<F: Sharable>(&mut self, critical_channel: bool) -> NodeBuilder<O, F> {
-        // equivalent of start_pipeline for a subbranch of a flow diagram. generates an entry in the split for the branch
-        // returns the head of the new branch which can be attached to like a normal linear pipeline
-        match &mut self.node.output {
-            NodeSender::MUO(node_sender) => {
-                let channel_metadata = ChannelMetadata::new(self.node.id.clone(), critical_channel);
-                let (multiplexer_sender, multiplexer_receiver) = channel_wrapped(self.parameters.backpressure_val, channel_metadata);
-                node_sender.add_sender(multiplexer_sender);
-
-                let mut successor: PipelineNode<O, F> = PipelineNode::new();
-
-                successor.input = NodeReceiver::SI(SingleReceiver::new(multiplexer_receiver, self.parameters.timeout, self.parameters.retries));
-                NodeBuilder { node: successor, parameters: self.parameters.clone(), construction_queue: self.construction_queue.clone(), state: self.state.clone() }
-            }
-            _ => panic!("To add a multiplexer branch you must declare it as a multiplexer with multiplexer_start")
-        }
-    }
-    pub fn multiplexer_lock(self, step: impl PipelineStep<I, O> + 'static) {
-        // submit the split to the thread pool, preventing any more branches from being added and making it computable
-        let new_thread =
-            PipelineThread::new(step, self.node, self.parameters.clone());
-        self.construction_queue.push(new_thread);
-    }
-}
-
-pub struct DemultiplexerBuilder<I: Sharable, O: Sharable> {
-    node: PipelineNode<I, O>,
-    construction_queue: ConstructionQueue,
-    parameters: PipelineParameters,
-    state: (Arc<AtomicU8>, mpsc::Sender<ThreadStateSpace>),
-}
-impl<I: Sharable, O: Sharable> DemultiplexerBuilder<I, O> {
-    fn demultiplexer_add(&mut self, receiver: WrappedReceiver<I>) {
-        // attach an input to a joint
-        match &mut self.node.input {
-            NodeReceiver::DMI(node_receiver) => { node_receiver.add_receiver(receiver) }
-            _ => panic!("Cannot add a demultiplexer input to a node which was not declared as a demultiplexer with demultiplexer_begin")
-        }
-    }
-
-    pub fn demultiplexer_lock<F: Sharable>(
-        mut self,
-        step: impl PipelineStep<I, O> + 'static,
-        critical_channel: bool
-    ) -> NodeBuilder<O, F> {
-        match &mut self.node.input {
-            NodeReceiver::DMI(_) => {
-                let channel_metadata: ChannelMetadata = ChannelMetadata::new(self.node.id.clone(), critical_channel);
-                let (sender, receiver) = channel_wrapped(self.parameters.backpressure_val, channel_metadata);
-                let mut successor: PipelineNode<O, F> = PipelineNode::new();
-
-                self.node.output = NodeSender::SO(SingleSender::new(sender));
-                successor.input = NodeReceiver::SI(SingleReceiver::new(
-                    receiver,
-                    self.parameters.timeout,
-                    self.parameters.retries,
-                ));
-
-                let new_thread = PipelineThread::new(
-                    step,
-                    self.node,
-                    self.parameters.clone(),
-                );
-                self.construction_queue.push(new_thread);
-
-                NodeBuilder {
-                    node: successor,
-                    parameters: self.parameters.clone(),
-                    construction_queue: self.construction_queue.clone(),
-                    state: self.state.clone(),
-                }
-            }
-            _ => panic!("To joint lock a node it must be declared as a joint"),
         }
     }
 }

@@ -56,5 +56,5 @@ tui-tree-widget = "0.23.1"
 rayon-core = "1.13.0"
 async-channel = "2.5.0"
 graph = "0.3.1"
-tokio = { version = "1.47.1", features = ["rt"] }
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread"] }
 

@@ -1,14 +1,17 @@
+use std::collections::HashMap;
 use crate::pipeline::construction_layer::pipeline_node::CollectibleThread;
 use atomic_enum::atomic_enum;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use itertools::Itertools;
+use crate::pipeline::construction_layer::builders::BuildingNode;
 
 pub struct PipelineAdjacencyEdge {
     source_id: usize,
     destination_id: usize,
     num_executions_since_completion: AtomicU64,
     num_executions_to_complete: u64,
+    is_stopped: Arc<AtomicBool>,
 }
 impl PipelineAdjacencyEdge {
     pub fn get_source_id(&self) -> usize {
@@ -32,6 +35,11 @@ impl PipelineAdjacencyEdge {
             self.num_executions_since_completion.fetch_sub(self.num_executions_to_complete, Ordering::Release);
         }
     }
+
+    pub fn record_consumption(&self) {
+        self.num_executions_since_completion
+            .fetch_sub(self.num_executions_to_complete, Ordering::Release);
+    }
 }
 
 
@@ -45,11 +53,12 @@ pub enum PipelineNodeState {
 
 
 pub struct PipelineAdjacencyNode {
-    predecessors: Vec<PipelineAdjacencyEdge>,
-    successors: Vec<PipelineAdjacencyEdge>,
+    predecessors: Vec<Arc<PipelineAdjacencyEdge>>,
+    successors: Vec<Arc<PipelineAdjacencyEdge>>,
     thread_object: Mutex<dyn CollectibleThread>,
     current_state: Arc<PipelineNodeState>,
     requested_state: Arc<PipelineNodeState>,
+    node_id: usize,
     node_name: String,
 }
 impl PipelineAdjacencyNode {
@@ -62,6 +71,12 @@ impl PipelineAdjacencyNode {
                 .collect(),
             successors: Vec::new(),
             thread_object,
+        }
+    }
+
+    pub fn record_consumption(&self) {
+        for predecessor in self.get_predecessors() {
+            predecessor.record_consumption();
         }
     }
 
@@ -80,6 +95,9 @@ impl PipelineAdjacencyNode {
     pub fn get_name(&self) -> &String {
         &self.node_name
     }
+    pub fn get_id(&self) -> usize {
+        self.node_id
+    }
 
     pub fn is_running(&self) -> bool {
         *self.current_state == PipelineNodeState::Run
@@ -91,16 +109,6 @@ impl PipelineAdjacencyNode {
 
     pub fn is_sink(&self) -> bool {
         self.successors.len() == 0
-    }
-
-    pub fn record_consumption(&self) {
-        self.num_executions_since_completion
-            .fetch_sub(self.num_executions_to_complete, Ordering::Release);
-    }
-
-    pub fn responsibility_fulfilled(&self) -> bool {
-        self.num_executions_since_completion.load(Ordering::Acquire)
-            >= self.num_executions_to_complete
     }
 
     pub fn predecessors_responsibility_fulfilled(&self) -> bool {
@@ -121,57 +129,52 @@ pub struct PipelineGraph {
     adjacency_list: Arc<Vec<Arc<PipelineAdjacencyNode>>>,
 }
 impl PipelineGraph {
-    fn construct_partial_downstream(
-        collectible_thread_vector: Vec<Box<dyn CollectibleThread>>,
-    ) -> HashMap<String, Arc<PipelineAdjacencyNode>> {
-        let mut partial_downstream_map = HashMap::new();
+    fn create_graph_nodes(
+        build_vector: Vec<BuildingNode>,
+    ) -> (Vec<Arc<PipelineAdjacencyNode>>, Vec<(usize, HashMap<usize, usize>)>) {
+        let mut partial_downstream_vec = Vec::with_capacity(build_vector.len());
+        let mut adjacency_vec: Vec<(usize, HashMap<usize, usize>)> = Vec::with_capacity(build_vector.len());
 
-        for thread in collectible_thread_vector { // 
-            let thread_id = thread.get_id();
-            let node = PipelineAdjacencyNode::new(Mutex::new(thread));
+        for node in build_vector { //
+            adjacency_vec.push((node.id, node.successors));
+            let adj_node = PipelineAdjacencyNode::new(Mutex::new(node.thread));
 
-            partial_downstream_map.insert(thread_id, Arc::new(node)); // places the predecessors in the adjacency node
+            partial_downstream_vec.push(Arc::new(adj_node)); // places the predecessors in the adjacency node
         } // Data type: Silly
 
-        partial_downstream_map
+        (partial_downstream_vec, adjacency_vec)
     }
 
-    fn attach_predecessors(
-        mut partial_downstream_map: HashMap<String, Arc<PipelineAdjacencyNode>>,
-    ) -> HashMap<String, Arc<PipelineAdjacencyNode>> {
-        for (_, node) in partial_downstream_map.iter_mut() {
-            for metadata in *node.thread_object.lock().unwrap().get_channel_metadata() {
-                node.predecessors
-                    .push(partial_downstream_map[&metadata.origin_id].clone());
+    fn attach_edges(
+        partial_downstream_vec: &mut Vec<Arc<PipelineAdjacencyNode>>,
+        mut adjacency_vec: Vec<(usize, HashMap<usize, usize>)>
+    ) {
+        for source_adjacency in adjacency_vec.iter_mut() {
+            for dest_adjacency in adjacency_vec.iter_mut() {
+                let source_id = source_adjacency.0;
+                let dest_id = dest_adjacency.0;
+                if dest_adjacency.1.contains(&source_id) {
+                    let stop_flag = partial_downstream_vec[source_id].thread_object.get_mut().unwrap().clone_stop_flag(dest_id);
+                    let new_edge = Arc::new(PipelineAdjacencyEdge {
+                        source_id: source_id,
+                        destination_id: dest_id,
+                        num_executions_since_completion: AtomicU64::new(0),
+                        num_executions_to_complete: *source_adjacency.1.get(&dest_id).unwrap() as u64,
+                        is_stopped: stop_flag
+                    });
+                    partial_downstream_vec[dest_adjacency.0].successors.push(new_edge.clone());
+                    partial_downstream_vec[source_adjacency.0].predecessors.push(new_edge.clone());
+                    source_adjacency.1.retain(|&x| x != dest_adjacency.0);
+                }
             }
         }
-
-        partial_downstream_map
     }
 
-    fn construct_full_adjacency_map(
-        mut partial_downstream_map: HashMap<String, Arc<PipelineAdjacencyNode>>,
-    ) -> HashMap<String, Arc<PipelineAdjacencyNode>> {
-        for (_, dest_node) in partial_downstream_map.iter() {
-            for source_node in dest_node.predecessors {
-                // iterate over the source list of each and every node
-                source_node.successors.push(dest_node.clone());
-            }
-        }
-
-        partial_downstream_map
-    }
-
-    pub fn new(collectible_thread_vector: Vec<Box<dyn CollectibleThread>>) -> Self {
-        let partial_downstream_map =
-            PipelineAdjacencyMap::construct_partial_downstream(collectible_thread_vector);
-        let partial_downstream_map =
-            PipelineAdjacencyMap::attach_predecessors(partial_downstream_map);
-
-        PipelineAdjacencyMap {
-            adjacency_map: PipelineAdjacencyMap::construct_full_adjacency_map(
-                partial_downstream_map,
-            ),
+    pub fn new(build_vector: Vec<BuildingNode>) -> Self {
+        let (mut partial_downstream_vec, adj_vec) = Self::create_graph_nodes(build_vector);
+        Self::attach_edges(&mut partial_downstream_vec, adj_vec);
+        Self {
+            adjacency_list: Arc::new(partial_downstream_vec),
         }
     }
 
@@ -194,7 +197,7 @@ impl PipelineGraph {
     pub fn stop_sink(&self, id: usize) {
         let nodes_to_stop = self.stop_sink_get_nodes(id);
         for node_id in nodes_to_stop {
-            self.adjacency_list[node_id].requested_state = Arc::new(PipelineNodeState::Stop);
+            //self.adjacency_list[node_id].requested_state = Arc::new(PipelineNodeState::Stop); // find better way
         }
     }
     fn stop_sink_get_nodes(&self, id: usize) -> Vec<usize> {
@@ -207,9 +210,9 @@ impl PipelineGraph {
                 }
                 let mut predecessors_to_stop = Vec::new();
                 for predecessor in node.get_predecessors() {
-                    for nest_predecessor in self.stop_sink(predecessor.get_destination_id()) {
-                        if !predecessors_to_stop.contains(&nest_predecessor) {
-                            predecessors_to_stop.push(nest_predecessor);
+                    for next_predecessor in self.stop_sink(predecessor.get_destination_id()) {
+                        if !predecessors_to_stop.contains(&next_predecessor) {
+                            predecessors_to_stop.push(next_predecessor);
                         }
                     }
                 }
@@ -219,11 +222,44 @@ impl PipelineGraph {
         }
     }
 
-    fn stop_source_get_nodes(&self, id: usize) -> Vec<usize> {
-        let node = self.get_node(id);
-
-
+    pub fn stop_source(&self, id: usize) {
+        for node in self.stop_source_get_nodes(id) {
+            self.adjacency_list[node].requested_state = Arc::new(PipelineNodeState::Stop); // fix later
+        }
     }
 
-    fn stop_source_get_forward_nodes(&)
+    fn stop_source_get_nodes(&self, id: usize) -> Vec<usize> {
+        let mut nodes_to_stop = Vec::new();
+        for sink in self.stop_source_get_depending_sinks(id) {
+            for node in self.stop_sink_get_nodes(sink) {
+                if !nodes_to_stop.contains(&node) {
+                    nodes_to_stop.push(node);
+                }
+            }
+        }
+
+        nodes_to_stop
+    }
+
+    fn stop_source_get_depending_sinks(&self, id: usize) -> Vec<usize> {
+        let node = self.get_node(id);
+
+        match node {
+            Some(node) => {
+                if node.is_sink() {
+                    return vec![id];
+                }
+                let mut successors_to_stop = Vec::new();
+                for successor in node.get_successors() {
+                    for next_successor in self.stop_source_get_depending_sinks(successor.get_destination_id()) {
+                        if !successors_to_stop.contains(&next_successor) {
+                            successors_to_stop.push(next_successor);
+                        }
+                    }
+                }
+                successors_to_stop
+            }
+            None => Vec::new()
+        }
+    }
 }

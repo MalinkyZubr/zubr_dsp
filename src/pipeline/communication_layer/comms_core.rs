@@ -1,9 +1,10 @@
 use std::fmt::Display;
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use crate::pipeline::pipeline_traits::Sharable;
 use std::sync::mpmc::RecvTimeoutError;
 use std::sync::mpsc::{Receiver, SyncSender};
+use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver, error::SendError as TokioSendError};
 use std::time::Duration;
 
 
@@ -25,15 +26,39 @@ impl Display for ChannelState {
 
 
 pub struct WrappedSender<T: Sharable> {
-    sender: SyncSender<T>,
-    channel_state: Arc<AtomicUsize>
+    dest_id: usize,
+    is_stopped: Arc<AtomicBool>,
+    sender: TokioSender<T>,
+}
+impl<T: Sharable> WrappedSender<T> {
+    pub fn new(sender: TokioSender<T>, id: usize) -> Self {
+        WrappedSender {
+            sender,
+            is_stopped: Arc::new(AtomicBool::new(false)),
+            id,
+        }
+    }
+    pub async fn send(&mut self, data: T) -> Result<(), TokioSendError<T>> {
+        self.sender.send(data).await // this is all dummy code for now. We will need to change this later to handle errors properly
+    }
+
+    pub fn get_dest_id(&self) -> &usize {
+        &self.dest_id
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.is_stopped.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    pub fn clone_stop_flag(&self) -> Arc<AtomicBool> {
+        self.is_stopped.clone()
+    }
 }
 
 
 #[derive(Debug)]
 pub struct WrappedReceiver<T: Sharable> {
     receiver: Receiver<T>,
-    channel_metadata: ChannelMetadata,
     channel_state: Arc<AtomicUsize>
 }
 impl<T: Sharable> WrappedReceiver<T> {
