@@ -1,7 +1,7 @@
 use crate::pipeline::api::*;
 use crate::pipeline::interfaces::ODFormat;
 use crate::pipeline::interfaces::PipelineStep;
-use crate::pipeline::pipeline_traits::Sharable;
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::fmt::Debug;
 use std::sync::mpsc::Sender;
 

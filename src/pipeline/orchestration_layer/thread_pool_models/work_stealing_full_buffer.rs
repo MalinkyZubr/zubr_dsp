@@ -1,10 +1,10 @@
 #![feature(mpmc_channel)]
 
-use crate::pipeline::orchestration_layer::pipeline_graph::{PipelineAdjacencyEdge, PipelineGraph};
+use crate::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
+use itertools::Itertools;
 use rayon::{ThreadPool as RayonPool, ThreadPoolBuilder as RayonBuilder};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use itertools::Itertools;
 use tokio::{runtime::Builder as TokioBuilder, runtime::Runtime as TokioRuntime};
 
 pub trait ThreadTaskTopographical {
@@ -46,7 +46,7 @@ impl ThreadPoolTopographical {
                     .unwrap(),
             ),
             run_flag,
-            graph: graph,
+            graph,
         }
     }
 
@@ -80,7 +80,11 @@ impl ThreadPoolTopographical {
         }
         let adj_node = thread_pool.graph.get_node(node_id).unwrap();
         let compute_node = adj_node.get_thread_object().get_mut().unwrap();
-        let mut edges_sent = compute_node.run_senders().await;
+
+        let mut increment_size;
+        let mut edges_sent = compute_node
+            .run_senders(&node_id, &mut increment_size)
+            .await;
 
         // maybe this is a bad idea, one large operation, holds the await for too long. Profile later to identify if thats an issue
         // if it is, we extract senders and receivers up to the adjacency node level and do more direct computations
@@ -91,13 +95,17 @@ impl ThreadPoolTopographical {
                     thread_pool.clone(),
                     TaskType::Compute,
                 );
+                edge.increment_num_sends(increment_size as u64)
             }
         }
 
         if adj_node.is_source() || adj_node.predecessors_responsibility_fulfilled() {
             Self::task_submit(node_id, thread_pool, TaskType::Compute);
         }
+
+        adj_node.exit_execution();
     }
+
     pub fn async_compute_task(node_id: usize, thread_pool: Arc<Self>) {
         // in the future this will be for gpu computations that are effectively IO bound from the CPu perspective
     }
@@ -112,8 +120,9 @@ impl ThreadPoolTopographical {
         }
         let task = thread_pool.graph.get_node(node_id).unwrap();
         let mutable_task_object = task.get_thread_object().get_mut().unwrap(); // system guarantees that nothing else is trying to run this at the same time. No need to lock
+
+        task.enter_execution();
         mutable_task_object.call_thread(&node_id);
-        task.record_consumption();
 
         Self::task_submit(node_id, thread_pool, TaskType::Senders);
     }

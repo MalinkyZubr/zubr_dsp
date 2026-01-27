@@ -1,15 +1,13 @@
 use crate::pipeline::api::*;
+use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::communication_layer::formats::{ODFormat, ReceiveType};
 use crate::pipeline::construction_layer::pipeline_step::PipelineStep;
-use crate::pipeline::pipeline_traits::{HasID, Sharable};
-use crossbeam_queue::ArrayQueue;
-use std::cmp::PartialEq;
+use crate::pipeline::construction_layer::pipeline_tap::PipelineTap;
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::RecvTimeoutError;
 use std::sync::Arc;
 use std::time::Instant;
-use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 
 #[derive(Debug, Copy, Clone)]
 struct DummyStep {}
@@ -43,16 +41,16 @@ pub struct PipelineNode<I: Sharable, O: Sharable> {
     input: Vec<WrappedReceiver<I>>,
     output: Vec<WrappedSender<O>>,
     step: Box<dyn PipelineStep<I, O>>,
-    tap: Option<Arc<ArrayQueue<ODFormat<O>>>>,
+    tap: Option<PipelineTap<I>>,
     node_status: NodeStatus,
     buffered_data: Option<ODFormat<O>>,
 }
 impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
-    pub fn new(step: Box<dyn PipelineStep<I, O>>) -> PipelineNode<I, O> {
+    pub fn new(step: Box<dyn PipelineStep<I, O>>, input: Vec<WrappedReceiver<I>>, output: Vec<WrappedSender<O>>, tap: Option<PipelineTap<I>>) -> PipelineNode<I, O> {
         PipelineNode {
-            input: Vec::new(),
-            output: Vec::new(),
-            tap: None,
+            input,
+            output,
+            tap,
             node_status: NodeStatus::new(),
             step,
             buffered_data: None,
@@ -131,15 +129,27 @@ impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
     }
 }
 
+pub trait CollectibleThreadPrecursor {
+    fn add_input<I: Sharable>(&mut self, receiver: WrappedReceiver<I>);
+    fn add_output<O: Sharable>(&mut self, sender: WrappedSender<O>);
+    fn attach_step<I: Sharable, O: Sharable>(&mut self, step: Box<dyn PipelineStep<I, O>>);
+    fn attach_tap<I: Sharable>(&mut self, tap: PipelineTap<I>);
+    fn set_required_input_count(&mut self, count: usize);
+    fn set_name(&mut self, name: String);
+    fn get_id(&self) -> usize;
+    fn clear_outputs(&mut self);
+    fn into_collectible_thread(self) -> Box<dyn CollectibleThread>;
+}
+
 pub trait CollectibleThread: Send {
     fn call_thread(&mut self, id: &usize);
-    async fn run_senders(&mut self, id: &usize); // runs a join set and waits for all tasks in that set to finish
+    async fn run_senders(&mut self, id: &usize, increment_size: &mut usize); // runs a join set and waits for all tasks in that set to finish
     fn clone_output_stop_flag(&self, id: usize) -> Arc<AtomicBool>;
 }
 
 impl<I: Sharable, O: Sharable> CollectibleThread for PipelineNode<I, O> {
     fn call_thread(&mut self, id: &usize) {
-        log_message(format!("ThreadID: {} is called", id,), Level::Trace);
+        log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
 
         let received_data: Option<ReceiveType<I>> = self.input.receive();
@@ -164,9 +174,9 @@ impl<I: Sharable, O: Sharable> CollectibleThread for PipelineNode<I, O> {
         );
     }
 
-    async fn run_senders(&mut self, id: &usize) -> Vec<usize> {
+    async fn run_senders(&mut self, id: &usize, increment_size: &mut usize) -> Vec<usize> {
         match self.buffered_data.take() {
-            Some(output_data) => output_data.send(&mut self.output).await,
+            Some(output_data) => output_data.send(&mut self.output, increment_size).await,
             None => {
                 log_message(format!("No data to send on node {}", id), Level::Error);
                 Vec::new()

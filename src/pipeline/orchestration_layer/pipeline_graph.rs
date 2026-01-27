@@ -26,19 +26,13 @@ impl PipelineAdjacencyEdge {
         self.num_executions_since_completion.load(Ordering::Acquire) >= self.num_executions_to_complete
     }
 
-    pub fn increment_num_executions(&self) {
-        self.num_executions_since_completion.fetch_add(1, Ordering::Release);
+    pub fn increment_num_sends(&self, amount: u64) {
+        self.num_executions_since_completion.fetch_add(amount, Ordering::Release);
     }
 
-    pub fn decrement_num_executions(&self) {
-        if self.responsibility_fulfilled() {
-            self.num_executions_since_completion.fetch_sub(self.num_executions_to_complete, Ordering::Release);
-        }
-    }
-
-    pub fn record_consumption(&self) {
+    pub fn decrement_num_sends(&self, amount: u64) {
         self.num_executions_since_completion
-            .fetch_sub(self.num_executions_to_complete, Ordering::Release);
+            .fetch_sub(amount, Ordering::Release);
     }
 }
 
@@ -58,6 +52,7 @@ pub struct PipelineAdjacencyNode {
     thread_object: Mutex<dyn CollectibleThread>,
     current_state: Arc<PipelineNodeState>,
     requested_state: Arc<PipelineNodeState>,
+    currently_running: AtomicBool,
     node_id: usize,
     node_name: String,
 }
@@ -69,22 +64,28 @@ impl PipelineAdjacencyNode {
             thread_object,
             node_id: id,
             node_name,
+            currently_running: AtomicBool::new(false),
             requested_state: Arc::new(PipelineNodeState::Stop),
             current_state: Arc::new(PipelineNodeState::Stop)
         }
     }
 
-    pub fn record_consumption(&self) {
+    pub fn enter_execution(&self) {
+        self.currently_running.store(true, Ordering::Release);
         for predecessor in self.get_predecessors() {
             predecessor.record_consumption();
         }
     }
 
-    pub fn get_predecessors(&self) -> &Vec<PipelineAdjacencyEdge> {
+    pub fn exit_execution(&self) {
+        self.currently_running.store(false, Ordering::Release);
+    }
+
+    pub fn get_predecessors(&self) -> &Vec<Arc<PipelineAdjacencyEdge>> {
         &self.predecessors
     }
 
-    pub fn get_successors(&self) -> &Vec<PipelineAdjacencyEdge> {
+    pub fn get_successors(&self) -> &Vec<Arc<PipelineAdjacencyEdge>> {
         &self.successors
     }
 
@@ -121,7 +122,7 @@ impl PipelineAdjacencyNode {
     }
 
     pub fn node_ready_execute(&self) -> bool {
-        self.predecessors_responsibility_fulfilled() &&
+        self.predecessors_responsibility_fulfilled() && !self.currently_running.load(Ordering::Acquire)
     }
 }
 
@@ -137,7 +138,7 @@ impl PipelineGraph {
 
         for node in build_vector { //
             adjacency_vec.push((node.id, node.successors));
-            let adj_node = PipelineAdjacencyNode::new(Mutex::new(node.thread));
+            let adj_node = PipelineAdjacencyNode::new(Mutex::new(node.thread), node.id, node.name);
 
             partial_downstream_vec.push(Arc::new(adj_node)); // places the predecessors in the adjacency node
         } // Data type: Silly

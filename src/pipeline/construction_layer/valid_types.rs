@@ -1,4 +1,4 @@
-use crate::pipeline::pipeline_traits::HasDefault;
+use crate::pipeline::construction_layer::pipeline_traits::HasDefault;
 use num::Complex;
 
 pub trait ValidFloat {}

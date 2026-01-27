@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
-use crate::pipeline::pipeline_traits::Sharable;
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::sync::mpmc::RecvTimeoutError;
 use std::sync::mpsc::{Receiver, SyncSender};
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver, error::SendError as TokioSendError};
@@ -34,7 +34,7 @@ impl<T: Sharable> WrappedSender<T> {
         self.is_stopped.clone()
     }
 
-    pub fn set_id(&mut self, new_id: usize) {
+    pub fn set_dest_id(&mut self, new_id: usize) {
         self.dest_id = new_id;
     }
 

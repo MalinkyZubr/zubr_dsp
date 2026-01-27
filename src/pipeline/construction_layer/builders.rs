@@ -1,98 +1,138 @@
-use std::collections::HashMap;
-use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, channel_wrapped, ChannelMetadata};
-use crate::pipeline::communication_layer::comms_implementations::linear_comms::{
-    SingleReceiver, SingleSender,
-};
-use crate::pipeline::communication_layer::comms_implementations::multichannel_comms::{
-    MultichannelReceiver, MultichannelSender, Reassembler,
-};
-use crate::pipeline::communication_layer::comms_top_level::{NodeReceiver, NodeSender};
-use crate::pipeline::interfaces::PipelineStep;
+use crate::pipeline::api::{ConstructingPipeline, PipelineParameters};
+use crate::pipeline::communication_layer::comms_core::{channel_wrapped, WrappedReceiver, WrappedSender};
+use crate::pipeline::construction_layer::pipeline_node::{CollectibleThreadPrecursor, PipelineNode};
+use crate::pipeline::construction_layer::pipeline_step::PipelineStep;
+use crate::pipeline::construction_layer::pipeline_tap::PipelineTap;
+use crate::pipeline::construction_layer::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
 use crate::pipeline::orchestration_layer::pipeline::ConstructionQueue;
-use crate::pipeline::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU8, AtomicUsize};
 use std::sync::{mpsc, Arc};
-use std::sync::mpmc::channel;
-use crate::pipeline::api::{ConstructingPipeline, PipelineParameters};
-use crate::pipeline::construction_layer::pipeline_node::PipelineNode;
+
+static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 
-pub struct BuildingNode {
-    pub thread: Box<dyn CollectibleThread>,
+pub struct BuildingNode<I: Sharable, O: Sharable> {
     pub id: usize,
-    pub successors: HashMap<usize, usize> // (id, num executions)
+    pub name: String,
+    pub step: Option<Box<dyn PipelineStep<I, O>>>,
+    pub inputs: Vec<WrappedReceiver<I>>,
+    pub outputs: Vec<WrappedSender<O>>,
+    pub tap: Option<PipelineTap<I>>,
+    pub successors: HashMap<usize, usize>, // (id, num executions)
+    pub input_count: usize
 }
+impl<I: Sharable, O: Sharable> BuildingNode<I, O> {
+    pub fn new() -> Self {
+        BuildingNode {
+            id: NODE_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            name: String::new(),
+            step: None,
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            tap: None,
+            input_count: 0,
+            successors: HashMap::new(),
+        }
+    }
+}
+impl<I: Sharable, O: Sharable> CollectibleThreadPrecursor for BuildingNode<I, O> {
+    fn add_input<I: Sharable>(&mut self, receiver: WrappedReceiver<I>) {
+        self.inputs.push(receiver)
+    }
+
+    fn add_output<O: Sharable>(&mut self, sender: WrappedSender<O>) {
+        self.outputs.push(sender)
+    }
+
+    fn clear_outputs(&mut self) {
+        self.outputs.clear();
+    }
+
+    fn attach_step<I: Sharable, O: Sharable>(&mut self, step: Box<dyn PipelineStep<I, O>>) {
+        self.step = Some(step);
+    }
+
+    fn attach_tap<I: Sharable>(&mut self, tap: PipelineTap<I>) {
+        self.tap = Some(tap);
+    }
+
+    fn set_required_input_count(&mut self, count: usize) {
+        self.input_count = count;
+    }
+
+    fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    fn get_id(&self) -> usize {
+        self.id
+    }
+}
+
 pub struct NodeBuilder<I: Sharable, O: Sharable> {
-    node: PipelineNode<I, O>,
-    construction_queue: ConstructionQueue,
+    node: Box<dyn CollectibleThreadPrecursor>,
+    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
     parameters: PipelineParameters,
 }
 impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
     pub fn attach<F: Sharable>(
         mut self,
-        id: &'static str,
+        name: String,
         step: impl PipelineStep<I, O> + 'static,
         critical_channel: bool,
     ) -> NodeBuilder<O, F> {
         // attach a step to the selected node (self) and create a thread
         // produce a successor node to continue the pipeline
-        let channel_metadata = ChannelMetadata::new(self.node.get_id(), critical_channel);
-        let (sender, receiver) = channel_wrapped(self.parameters.backpressure_val, channel_metadata);
-        let mut successor: PipelineNode<O, F> = PipelineNode::new();
+        let (mut sender, mut receiver) = channel_wrapped::<O>(self.parameters.backpressure_val);
+        let mut successor: Box<dyn CollectibleThreadPrecursor> = Box::new(BuildingNode::new());
+        sender.set_dest_id(successor.get_id());
+        receiver.set_source_id(self.node.get_id());
 
-        self.node.set_id(id); 
+        self.node.set_name(name);
 
-        self.node.output = NodeSender::SO(SingleSender::new(sender));
-        successor.input = NodeReceiver::SI(SingleReceiver::new(
-            receiver,
-            self.parameters.timeout,
-            self.parameters.retries,
-        ));
+        self.node.add_output(sender);
+        successor.add_input(receiver);
 
-        let new_thread =
-            PipelineThread::new(step, self.node, self.parameters.clone());
-        self.construction_queue.push(new_thread);
+        self.build_vector.push(self.node);
 
         NodeBuilder {
             node: successor,
-            construction_queue: self.construction_queue,
-            parameters: self.parameters,
-            state: self.state,
+            build_vector: self.build_vector,
+            parameters: self.parameters
         }
     }
 
-    pub fn cap_pipeline(mut self, id: &'static str, step: impl PipelineStep<I, O> + 'static + Sink)
+    pub fn cap_pipeline(mut self, name: String, step: impl PipelineStep<I, O> + 'static + Sink)
     where
         O: Unit,
     {
         // End a linear pipeline branch, allowing the step itself to handle output to other parts of the program
-        self.node.set_id(id);
+        self.node.set_name(name);
+        self.node.clear_outputs();
 
-        self.node.output = NodeSender::Dummy;
-
-        let new_thread = PipelineThread::new(step, self.node, self.parameters.clone());
-        self.construction_queue.push(new_thread);
+        self.build_vector.push(self.node);
+        self.build_vector
     }
 
     pub fn start_pipeline<F: Sharable>(
-        start_id: &str,
+        name: String,
         source_step: impl PipelineStep<I, O> + 'static + Source,
-        pipeline: &ConstructingPipeline,
+        build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
+        parameters: PipelineParameters,
     ) -> NodeBuilder<O, F>
     where
         I: Unit,
     {
-        let parameters = pipeline.get_cloned_parameters();
-        let channel_metadata: ChannelMetadata = ChannelMetadata::new("START".to_string(), true);
         // start a pipeline, allowing the step itself to handle input from other parts of the program
-        let (sender, receiver) = channel_wrapped(parameters.backpressure_val, channel_metadata);
+        let (sender, receiver) = channel_wrapped::<O>(parameters.backpressure_val);
 
-        let start_node: PipelineNode<I, O> = PipelineNode {
-            input: NodeReceiver::Dummy,
-            output: NodeSender::SO(SingleSender::new(sender)),
-            id: start_id.to_string(),
-            tap: None,
-        };
+        let mut start_node = BuildingNode::new();
+        start_node.set_name(name);
+        start_node.add_output(sender);
+        start_node.attach_step(Some(Box::new(source_step)));
 
         let mut successor: PipelineNode<O, F> = PipelineNode::new();
         successor.input = NodeReceiver::SI(SingleReceiver::new(
@@ -354,7 +394,7 @@ impl<I: Sharable, O: Sharable> JointBuilder<I, O> {
     pub fn joint_lock<F: Sharable>(
         mut self,
         step: impl PipelineStep<I, O> + 'static,
-        critical_channel: bool
+        critical_channel: bool,
     ) -> NodeBuilder<O, F> {
         match &mut self.node.input {
             NodeReceiver::MI(_) => {
@@ -394,8 +434,7 @@ impl<I: Sharable, O: Sharable> JointBuilder<I, O> {
         match &mut self.node.input {
             NodeReceiver::MI(node_receiver) => {
                 node_receiver.add_receiver(receiver);
-                
-            },
+            }
             _ => panic!("Cannot add lazy feedback node to a node which was not declared as a joint with joint_begin")
         };
 

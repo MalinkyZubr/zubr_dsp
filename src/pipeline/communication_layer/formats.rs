@@ -54,11 +54,20 @@ impl<T: Sharable> ODFormat<T> {
         }
     }
 
-    pub async fn send(self, sender: &mut Vec<WrappedSender<T>>) -> Vec<usize> {
+    pub async fn send(self, sender: &mut Vec<WrappedSender<T>>, increment_count: &mut usize) -> Vec<usize> {
         match self {
-            Self::Decompose(values) => Self::send_decompose(values, sender).await,
-            Self::Series(values) => Self::send_series(values, sender).await,
-            Self::Standard(value) => Self::send_standard(value, sender).await
+            Self::Decompose(values) => {
+                *increment_count = 1;
+                Self::send_decompose(values, sender).await
+            },
+            Self::Series(values) => {
+                *increment_count = values.len();
+                Self::send_series(values, sender).await
+            },
+            Self::Standard(value) => {
+                *increment_count = 1;
+                Self::send_standard(value, sender).await
+            }
         }
     }
 
@@ -93,6 +102,7 @@ impl<T: Sharable> ODFormat<T> {
 
     async fn send_series(values: Vec<T>, sender: &mut Vec<WrappedSender<T>>) -> Vec<usize> {
         let mut return_vec = Vec::with_capacity(sender.len());
+
         for value in values {
             for sender_unit in sender.iter_mut().skip(1) {
                 if !sender_unit.is_stopped() {

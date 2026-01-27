@@ -1,7 +1,7 @@
 use crate::pipeline::construction_layer::sources::audio_file_source::AudioReadResult::EOF;
 use crate::pipeline::interfaces::ODFormat;
 use crate::pipeline::interfaces::PipelineStep;
-use crate::pipeline::pipeline_traits::Source;
+use crate::pipeline::construction_layer::pipeline_traits::Source;
 use std::fs::File;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::Decoder;
