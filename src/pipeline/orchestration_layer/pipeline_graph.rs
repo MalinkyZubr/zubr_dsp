@@ -62,15 +62,15 @@ pub struct PipelineAdjacencyNode {
     node_name: String,
 }
 impl PipelineAdjacencyNode {
-    pub fn new(thread_object: Mutex<Box<dyn CollectibleThread>>) -> Self {
+    pub fn new(thread_object: Mutex<Box<dyn CollectibleThread>>, id: usize, node_name: String) -> Self {
         Self {
-            predecessors: thread_object
-                .get_channel_metadata()
-                .iter()
-                .map(|x| x.origin_id)
-                .collect(),
+            predecessors: Vec::new(),
             successors: Vec::new(),
             thread_object,
+            node_id: id,
+            node_name,
+            requested_state: Arc::new(PipelineNodeState::Stop),
+            current_state: Arc::new(PipelineNodeState::Stop)
         }
     }
 
@@ -261,5 +261,13 @@ impl PipelineGraph {
             }
             None => Vec::new()
         }
+    }
+    
+    pub fn start_all(&self) {
+        
+    }
+    
+    pub fn stop_all(&self) {
+        
     }
 }
