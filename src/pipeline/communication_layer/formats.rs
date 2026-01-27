@@ -19,16 +19,6 @@ pub enum ReceiveType<T: Sharable> {
     Multichannel(Vec<T>),
     Dummy
 }
-impl<T: Sharable> crate::pipeline::interfaces::ReceiveType<T> {
-    pub fn to_string(&self) -> &str {
-        match self {
-            Self::Single(_) => "Single",
-            Self::Reassembled(_) => "Reassembled",
-            Self::Multichannel(_) => "Multichannel",
-            Self::Dummy => "Dummy"
-        }
-    }
-}
 
 
 #[derive(Debug, Clone)]

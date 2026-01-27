@@ -1,3 +1,5 @@
+use crate::pipeline::communication_layer::formats::ODFormat;
+
 // how can I make multiple input and output types more convenient?
 /*
 1. every pipeline step has a separate trait method for each input type, with separate signature. By defualt it will return an error saying its unimplemented

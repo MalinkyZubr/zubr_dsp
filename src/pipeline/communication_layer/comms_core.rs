@@ -6,23 +6,7 @@ use std::sync::mpmc::RecvTimeoutError;
 use std::sync::mpsc::{Receiver, SyncSender};
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver, error::SendError as TokioSendError};
 use std::time::Duration;
-
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ChannelState {
-    ERROR=2,
-    STOPPED=1,
-    OKAY=0
-}
-impl Display for ChannelState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ChannelState::ERROR => write!(f, "ERROR"),
-            ChannelState::STOPPED => write!(f, "STOPPED"),
-            ChannelState::OKAY => write!(f, "OKAY"),
-        }
-    }
-}
+use crate::pipeline::communication_layer::formats::ReceiveType;
 
 
 pub struct WrappedSender<T: Sharable> {
@@ -31,19 +15,15 @@ pub struct WrappedSender<T: Sharable> {
     sender: TokioSender<T>,
 }
 impl<T: Sharable> WrappedSender<T> {
-    pub fn new(sender: TokioSender<T>, id: usize) -> Self {
+    pub fn new(sender: TokioSender<T>, dest_id: usize) -> Self {
         WrappedSender {
             sender,
             is_stopped: Arc::new(AtomicBool::new(false)),
-            id,
+            dest_id,
         }
     }
     pub async fn send(&mut self, data: T) -> Result<(), TokioSendError<T>> {
         self.sender.send(data).await // this is all dummy code for now. We will need to change this later to handle errors properly
-    }
-
-    pub fn get_dest_id(&self) -> &usize {
-        &self.dest_id
     }
 
     pub fn is_stopped(&self) -> bool {
@@ -53,67 +33,71 @@ impl<T: Sharable> WrappedSender<T> {
     pub fn clone_stop_flag(&self) -> Arc<AtomicBool> {
         self.is_stopped.clone()
     }
+
+    pub fn set_id(&mut self, new_id: usize) {
+        self.dest_id = new_id;
+    }
+
+    pub fn get_dest_id(&self) -> &usize {
+        &self.dest_id
+    }
 }
 
 
 #[derive(Debug)]
 pub struct WrappedReceiver<T: Sharable> {
-    receiver: Receiver<T>,
-    channel_state: Arc<AtomicUsize>
+    source_id: usize,
+    receiver: TokioReceiver<T>,
+    num_receives: usize
 }
 impl<T: Sharable> WrappedReceiver<T> {
-    pub fn new(receiver: Receiver<T>, channel_metadata: ChannelMetadata) -> Self {
+    pub fn new(receiver: TokioReceiver<T>, num_receives: usize, source_id: usize) -> Self {
         WrappedReceiver {
+            source_id,
             receiver,
-            channel_metadata
+            num_receives
         }
     }
-    fn result_handler(
-        &self,
-        result: &mut Result<T, RecvTimeoutError>,
-        retry_num: &mut usize,
-        retries: usize,
-    ) -> bool {
-        match result {
-            Err(err) => {
-                match err {
-                    RecvTimeoutError::Timeout => *retry_num += 1,
-                    _ => *retry_num = retries,
-                };
-                false
+
+    pub fn recv(&mut self) -> Result<ReceiveType<T>, ()> {
+        if self.num_receives > 1 {
+            let mut receive_vector = Vec::with_capacity(self.num_receives);
+
+            for _ in 0..self.num_receives {
+                let recv_value = self.receiver.blocking_recv();
+                match recv_value {
+                    Some(x) => receive_vector.push(x),
+                    None => return Err(())
+                }
             }
-            Ok(_) => true,
+            Ok(ReceiveType::Reassembled(receive_vector))
+        }
+        else {
+            match self.receiver.recv() {
+                Ok(x) => Ok(ReceiveType::Single(x)),
+                Err(_) => Err(())
+            }
         }
     }
-    pub fn recv(&mut self, timeout: u64, retries: usize) -> Result<T, RecvTimeoutError> {
-        let mut retry_num = 0;
 
-        let mut result = Err(RecvTimeoutError::Timeout);
-        let mut success_flag = false;
-
-        while retry_num < retries && !success_flag {
-            result = self.receiver.recv_timeout(Duration::from_millis(timeout));
-
-            success_flag = self.result_handler(&mut result, &mut retry_num, retries);
-        }
-        result
+    pub fn set_num_receives(&mut self, num_receives: usize) {
+        self.num_receives = num_receives;
     }
-    
-    pub fn get_channel_metadata(&self) -> &ChannelMetadata {
-        &self.channel_metadata
+
+    pub fn set_source_id(&mut self, source_id: usize) {
+        self.source_id = source_id;
+    }
+
+    pub fn get_source_id(&self) -> usize {
+        self.source_id
     }
 }
 
 
-pub trait WithChannelMetadata {
-    fn get_channel_metadata(&self) -> Vec<ChannelMetadata>;
-}
-
-
-pub fn channel_wrapped<T: Sharable>(buffer_size: usize, channel_metadata: ChannelMetadata) -> (SyncSender<T>, WrappedReceiver<T>) {
+pub fn channel_wrapped<T: Sharable>(buffer_size: usize) -> (WrappedSender<T>, WrappedReceiver<T>) {
     if buffer_size == 0 {
         panic!("Buffer size must be greater than 0");
     }
-    let (sender, receiver) = std::sync::mpsc::sync_channel(buffer_size);
-    (sender, WrappedReceiver::new(receiver, channel_metadata))
+    let (sender, receiver) = tokio::sync::mpsc::channel(buffer_size);
+    (WrappedSender::new(sender, 0), WrappedReceiver::new(receiver, 1, 0))
 }
