@@ -138,7 +138,7 @@ pub trait CollectibleThreadPrecursor {
     fn set_name(&mut self, name: String);
     fn get_id(&self) -> usize;
     fn clear_outputs(&mut self);
-    fn into_collectible_thread(self) -> Box<dyn CollectibleThread>;
+    fn into_collectible_thread<I: Sharable, O: Sharable>(self) -> Box<dyn CollectibleThread>;
 }
 
 pub trait CollectibleThread: Send {

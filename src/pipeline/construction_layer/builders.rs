@@ -1,6 +1,6 @@
 use crate::pipeline::api::{ConstructingPipeline, PipelineParameters};
 use crate::pipeline::communication_layer::comms_core::{channel_wrapped, WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::pipeline_node::{CollectibleThreadPrecursor, PipelineNode};
+use crate::pipeline::construction_layer::pipeline_node::{CollectibleThread, CollectibleThreadPrecursor, PipelineNode};
 use crate::pipeline::construction_layer::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_tap::PipelineTap;
 use crate::pipeline::construction_layer::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
@@ -33,7 +33,7 @@ impl<I: Sharable, O: Sharable> BuildingNode<I, O> {
             inputs: Vec::new(),
             outputs: Vec::new(),
             tap: None,
-            input_count: 0,
+            input_count: 1,
             successors: HashMap::new(),
         }
     }
@@ -51,8 +51,8 @@ impl<I: Sharable, O: Sharable> CollectibleThreadPrecursor for BuildingNode<I, O>
         self.outputs.clear();
     }
 
-    fn attach_step<I: Sharable, O: Sharable>(&mut self, step: Box<dyn PipelineStep<I, O>>) {
-        self.step = Some(step);
+    fn attach_step<I: Sharable, O: Sharable>(&mut self, step: impl PipelineStep<I, O>) {
+        self.step = Some(Box::new(step));
     }
 
     fn attach_tap<I: Sharable>(&mut self, tap: PipelineTap<I>) {
@@ -69,6 +69,23 @@ impl<I: Sharable, O: Sharable> CollectibleThreadPrecursor for BuildingNode<I, O>
 
     fn get_id(&self) -> usize {
         self.id
+    }
+    fn into_collectible_thread<I: Sharable, O: Sharable>(&mut self) -> Box<dyn CollectibleThread> {
+        if self.step.is_none() { 
+            panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
+        }
+        let step = self.step.take().unwrap();
+        let new_node: PipelineNode<I, O> = PipelineNode::new(step, self.inputs.take(), self.outputs.take(), self.tap.take());
+        Box::new(
+            
+        )
+    }
+}
+
+fn silly(mut stuff: Vec<Box<dyn CollectibleThreadPrecursor>>) {
+    let mut out: Vec<Box<dyn CollectibleThread>> = Vec::new();
+    for node in stuff {
+        out.push(node.into_collectible_thread());
     }
 }
 
@@ -120,7 +137,7 @@ impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
     pub fn start_pipeline<F: Sharable>(
         name: String,
         source_step: impl PipelineStep<I, O> + 'static + Source,
-        build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
+        mut build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
         parameters: PipelineParameters,
     ) -> NodeBuilder<O, F>
     where
@@ -134,57 +151,23 @@ impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
         start_node.add_output(sender);
         start_node.attach_step(Some(Box::new(source_step)));
 
-        let mut successor: PipelineNode<O, F> = PipelineNode::new();
-        successor.input = NodeReceiver::SI(SingleReceiver::new(
-            receiver,
-            parameters.timeout,
-            parameters.retries,
-        ));
-
-        let new_thread = PipelineThread::new(
-            source_step,
-            start_node,
-            parameters.clone(),
-        );
-        pipeline.get_nodes().push(new_thread);
+        let mut successor: BuildingNode<O, F> = BuildingNode::new();
+        successor.add_input(receiver);
+        
+        build_vector.push(start_node);
 
         NodeBuilder {
             node: successor,
             parameters,
-            construction_queue: pipeline.get_nodes(),
-            state: pipeline.get_state_communicators(),
+            build_vector
         }
     }
 
-    pub fn split_begin(mut self, id: &'static str) -> SplitBuilder<I, O> {
-        // take the node outputted by a previous step in the builder and declare it as multiple out
-        // allows the node to have multiple outputs appended
-        self.node.set_id(id);
-        let sender: MultichannelSender<O> = MultichannelSender::new();
-        self.node.output = NodeSender::MO(sender);
-
+    pub fn split_begin(mut self) -> SplitBuilder<I, O> {
         SplitBuilder {
             node: self.node,
             parameters: self.parameters,
-            construction_queue: self.construction_queue,
-            state: self.state.clone(),
-        }
-    }
-
-    pub fn mutltiplexer_begin(
-        mut self,
-        id: &'static str,
-        channel_selector: Arc<AtomicUsize>,
-    ) -> MultiplexerBuilder<I, O> {
-        self.node.set_id(id);
-        let sender: Multiplexer<O> = Multiplexer::new(channel_selector);
-        self.node.output = NodeSender::MUO(sender);
-
-        MultiplexerBuilder {
-            node: self.node,
-            parameters: self.parameters,
-            construction_queue: self.construction_queue,
-            state: self.state,
+            build_vector: self.build_vector,
         }
     }
 
@@ -195,145 +178,48 @@ impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
             _ => panic!("Must end branch with single. This should be automatic behavior"),
         }
     }
-
-    pub fn multiplex_branch_end(mut self, demultiplexer_builder: &mut DemultiplexerBuilder<I, O>) {
-        match self.node.input {
-            NodeReceiver::SI(receiver) => {
-                demultiplexer_builder.demultiplexer_add(receiver.extract_receiver())
-            }
-            NodeReceiver::Dummy => panic!("Cannot end multiplexed branch with Dummy"),
-            _ => panic!("Must end branch with single. This should be automatic behavior"),
-        }
-    }
-
-    pub fn add_reassembler(mut self, reassemble_quantity: usize) -> Self {
-        match self.node.input {
-            NodeReceiver::SI(receiver) => {
-                self.node.input = NodeReceiver::REA(Reassembler::new(
-                    receiver.extract_receiver(),
-                    reassemble_quantity,
-                    self.parameters.timeout,
-                    self.parameters.retries,
-                ))
-            }
-            _ => panic!("Cannot set reassembler on this node, must be a single receiver node"),
-        }
-
-        self
-    }
-}
-
-pub fn demultiplexer_begin<JI: Sharable, JO: Sharable>(
-    id: &str,
-    channel_selector: Arc<AtomicUsize>,
-    pipeline: &ConstructingPipeline,
-) -> DemultiplexerBuilder<JI, JO> {
-    // create a node marked as a join which can take multiple input receivers. used to join multiple sub branches together (eg adder or something)
-    let mut demultiplexer_node: PipelineNode<JI, JO> = PipelineNode {
-        input: NodeReceiver::Dummy,
-        output: NodeSender::Dummy,
-        id: id.to_string(),
-        tap: None,
-    };
-    let parameters = pipeline.get_cloned_parameters();
-    demultiplexer_node.input = NodeReceiver::DMI(Demultiplexer::new(
-        channel_selector,
-        parameters.timeout,
-        parameters.retries,
-    ));
-
-    DemultiplexerBuilder {
-        node: demultiplexer_node,
-        parameters,
-        construction_queue: pipeline.get_nodes(),
-        state: pipeline.get_state_communicators(),
-    }
 }
 
 pub fn joint_begin<JI: Sharable, JO: Sharable>(
-    id: &str,
-    pipeline: &ConstructingPipeline,
+    name: String,
+    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
+    parameters: PipelineParameters
 ) -> JointBuilder<JI, JO> {
     // create a node marked as a joint which can take multiple input receivers. used to join multiple sub branches together (eg adder or something)
-    let mut joint_node: PipelineNode<JI, JO> = PipelineNode {
-        input: NodeReceiver::Dummy,
-        output: NodeSender::Dummy,
-        id: id.to_string(),
-        tap: None,
-    };
-    let parameters = pipeline.get_cloned_parameters();
-    joint_node.input = NodeReceiver::MI(MultichannelReceiver::new(
-        parameters.timeout,
-        parameters.retries,
-    ));
-
+    let mut join_node: BuildingNode<JI, JO> = BuildingNode::new();
+    join_node.set_name(name);
     JointBuilder {
-        node: joint_node,
-        parameters,
-        construction_queue: pipeline.get_nodes(),
-        state: pipeline.get_state_communicators(),
-    }
-}
-
-pub fn joint_feedback_begin<I: Sharable, O: Sharable>(
-    id: &str,
-    pipeline: &ConstructingPipeline,
-) -> JointBuilder<I, O> {
-    // Since there is no convenient origin point for a joint used in feedback in the pattern, a standalone function is needed to support type inference
-    let mut joint_node: PipelineNode<I, O> = PipelineNode {
-        input: NodeReceiver::Dummy,
-        output: NodeSender::Dummy,
-        id: id.to_string(),
-        tap: None,
-    };
-    let parameters = pipeline.get_cloned_parameters();
-    joint_node.input = NodeReceiver::MI(MultichannelReceiver::new(
-        parameters.timeout,
-        parameters.retries,
-    ));
-
-    JointBuilder {
-        node: joint_node,
-        parameters,
-        construction_queue: pipeline.get_nodes(),
-        state: pipeline.get_state_communicators(),
+        node: Box::new(join_node),
+        build_vector,
+        parameters
     }
 }
 
 pub struct SplitBuilder<I: Sharable, O: Sharable> {
-    node: PipelineNode<I, O>,
-    construction_queue: ConstructionQueue,
+    node: Box<dyn CollectibleThreadPrecursor>,
+    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
     parameters: PipelineParameters,
-    state: (Arc<AtomicU8>, mpsc::Sender<ThreadStateSpace>),
 }
 impl<I: Sharable, O: Sharable> SplitBuilder<I, O> {
-    pub fn split_add<F: Sharable>(&mut self, critical_channel: bool) -> NodeBuilder<O, F> {
+    pub fn split_add<F: Sharable>(&mut self, name: String) -> NodeBuilder<O, F> {
         // equivalent of start_pipeline for a subbranch of a flow diagram. generates an entry in the split for the branch
         // returns the head of the new branch which can be attached to like a normal linear pipeline
-        match &mut self.node.output {
-            NodeSender::MO(node_sender) => {
-                let (split_sender, split_receiver) =
-                    channel_wrapped(self.parameters.backpressure_val, ChannelMetadata::new(self.node.id.clone(), critical_channel));
-                node_sender.add_sender(split_sender);
+        let (sender, receiver) = channel_wrapped::<O>(self.parameters.backpressure_val);
 
-                let mut successor: PipelineNode<O, F> = PipelineNode::new();
+        let mut branch_node = BuildingNode::new();
+        branch_node.set_name(name);
+        self.node.add_output(sender);
+        branch_node.add_input(receiver);
 
-                successor.input = NodeReceiver::SI(SingleReceiver::new(
-                    split_receiver, // super bumpo <3
-                    self.parameters.timeout,
-                    self.parameters.retries,
-                ));
+        let 
+        successor.add_input(receiver);
 
-                NodeBuilder {
-                    node: successor,
-                    parameters: self.parameters.clone(),
-                    construction_queue: self.construction_queue.clone(),
-                    state: self.state.clone(),
-                }
-            }
-            _ => panic!(
-                "To add a split branch you must declare a node as a splitter with split_begin!"
-            ),
+        build_vector.push(start_node);
+
+        NodeBuilder {
+            node: successor,
+            parameters,
+            build_vector
         }
     }
 
@@ -346,10 +232,9 @@ impl<I: Sharable, O: Sharable> SplitBuilder<I, O> {
 }
 
 pub struct LazyJointInputBuilder<I: Sharable, O: Sharable> {
-    node: PipelineNode<I, O>,
-    construction_queue: ConstructionQueue,
+    node: Box<dyn CollectibleThreadPrecursor>,
+    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
     parameters: PipelineParameters,
-    state: (Arc<AtomicU8>, mpsc::Sender<ThreadStateSpace>),
 }
 impl<I: Sharable, O: Sharable> LazyJointInputBuilder<I, O> {
     pub fn joint_link_lazy(
@@ -377,10 +262,9 @@ impl<I: Sharable, O: Sharable> LazyJointInputBuilder<I, O> {
 }
 
 pub struct JointBuilder<I: Sharable, O: Sharable> {
-    node: PipelineNode<I, O>,
-    construction_queue: ConstructionQueue,
+    node: Box<dyn CollectibleThreadPrecursor>,
+    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
     parameters: PipelineParameters,
-    state: (Arc<AtomicU8>, mpsc::Sender<ThreadStateSpace>),
 }
 impl<I: Sharable, O: Sharable> JointBuilder<I, O> {
     fn joint_add(&mut self, receiver: WrappedReceiver<I>) {
