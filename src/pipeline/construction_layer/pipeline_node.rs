@@ -138,6 +138,7 @@ pub trait CollectibleThreadPrecursor {
     fn set_name(&mut self, name: String);
     fn get_id(&self) -> usize;
     fn clear_outputs(&mut self);
+    fn extract_input<I: Sharable>(&mut self) -> Vec<WrappedReceiver<I>>;
     fn into_collectible_thread<I: Sharable, O: Sharable>(self) -> Box<dyn CollectibleThread>;
 }
 

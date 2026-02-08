@@ -70,22 +70,15 @@ impl<I: Sharable, O: Sharable> CollectibleThreadPrecursor for BuildingNode<I, O>
     fn get_id(&self) -> usize {
         self.id
     }
-    fn into_collectible_thread<I: Sharable, O: Sharable>(&mut self) -> Box<dyn CollectibleThread> {
+    fn into_collectible_thread<I: Sharable, O: Sharable>(mut self) -> Box<dyn CollectibleThread> {
         if self.step.is_none() { 
             panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
         }
         let step = self.step.take().unwrap();
         let new_node: PipelineNode<I, O> = PipelineNode::new(step, self.inputs.take(), self.outputs.take(), self.tap.take());
         Box::new(
-            
+            PipelineNode::new(step, self.inputs, self.outputs, self.tap)
         )
-    }
-}
-
-fn silly(mut stuff: Vec<Box<dyn CollectibleThreadPrecursor>>) {
-    let mut out: Vec<Box<dyn CollectibleThread>> = Vec::new();
-    for node in stuff {
-        out.push(node.into_collectible_thread());
     }
 }
 
@@ -120,6 +113,10 @@ impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
             build_vector: self.build_vector,
             parameters: self.parameters
         }
+    }
+    
+    pub fn test(&mut self) -> &mut Self {
+        return self;
     }
 
     pub fn cap_pipeline(mut self, name: String, step: impl PipelineStep<I, O> + 'static + Sink)
@@ -177,6 +174,10 @@ impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
             NodeReceiver::Dummy => panic!("Cannot end branch with Dummy"),
             _ => panic!("Must end branch with single. This should be automatic behavior"),
         }
+    }
+    
+    pub fn extract_receiver(self) -> WrappedReceiver<O> {
+        return self.node.re
     }
 }
 
@@ -267,48 +268,21 @@ pub struct JointBuilder<I: Sharable, O: Sharable> {
     parameters: PipelineParameters,
 }
 impl<I: Sharable, O: Sharable> JointBuilder<I, O> {
-    fn joint_add(&mut self, receiver: WrappedReceiver<I>) {
+    fn joint_add_linear(&mut self, mut input_builder: NodeBuilder<I, O>) {
         // attach an input to a joint
-        match &mut self.node.input {
-            NodeReceiver::MI(node_receiver) => { node_receiver.add_receiver(receiver) }
-            _ => panic!("Cannot add a joint input to a node which was not declared as a joint with joint_begin")
-        }
+        let (sender, receiver) = channel_wrapped::<O>(self.parameters.backpressure_val);
+        self.node.add_input(receiver);
+        
+        self.build_vector.push(Box::new(input_node));
     }
 
     pub fn joint_lock<F: Sharable>(
         mut self,
+        name: String,
         step: impl PipelineStep<I, O> + 'static,
         critical_channel: bool,
     ) -> NodeBuilder<O, F> {
-        match &mut self.node.input {
-            NodeReceiver::MI(_) => {
-                let channel_metadata: ChannelMetadata = ChannelMetadata::new(self.node.id.clone(), critical_channel);
-                let (sender, receiver) = channel_wrapped(self.parameters.backpressure_val, channel_metadata);
-                let mut successor: PipelineNode<O, F> = PipelineNode::new();
-
-                self.node.output = NodeSender::SO(SingleSender::new(sender));
-                successor.input = NodeReceiver::SI(SingleReceiver::new(
-                    receiver,
-                    self.parameters.timeout,
-                    self.parameters.retries,
-                ));
-
-                let new_thread = PipelineThread::new(
-                    step,
-                    self.node,
-                    self.parameters.clone(),
-                );
-                self.construction_queue.push(new_thread);
-
-                NodeBuilder {
-                    node: successor,
-                    parameters: self.parameters.clone(),
-                    construction_queue: self.construction_queue.clone(),
-                    state: self.state.clone(),
-                }
-            }
-            _ => panic!("To joint lock a node it must be declared as a joint"),
-        }
+        self.node.
     }
 
     pub fn joint_add_lazy<F: Sharable>(&mut self, critical_channel: bool) -> LazyJointInputBuilder<F, I> {
