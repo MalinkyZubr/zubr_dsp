@@ -1,310 +1,186 @@
-use crate::pipeline::api::{ConstructingPipeline, PipelineParameters};
-use crate::pipeline::communication_layer::comms_core::{channel_wrapped, WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::pipeline_node::{CollectibleThread, CollectibleThreadPrecursor, PipelineNode};
+use crate::pipeline::api::PipelineParameters;
+use crate::pipeline::communication_layer::comms_core::{
+    channel_wrapped, WrappedReceiver, WrappedSender,
+};
+use crate::pipeline::communication_layer::formats::ODFormat;
+use crate::pipeline::construction_layer::pipeline_node::{BuildingNode, CollectibleThread, CollectibleThreadPrecursor, PipelineNode};
 use crate::pipeline::construction_layer::pipeline_step::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_tap::PipelineTap;
 use crate::pipeline::construction_layer::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
 use crate::pipeline::orchestration_layer::pipeline::ConstructionQueue;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU8, AtomicUsize};
-use std::sync::{mpsc, Arc};
+use std::sync::atomic::AtomicUsize;
 
 static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-
-pub struct BuildingNode<I: Sharable, O: Sharable> {
-    pub id: usize,
-    pub name: String,
-    pub step: Option<Box<dyn PipelineStep<I, O>>>,
-    pub inputs: Vec<WrappedReceiver<I>>,
-    pub outputs: Vec<WrappedSender<O>>,
-    pub tap: Option<PipelineTap<I>>,
-    pub successors: HashMap<usize, usize>, // (id, num executions)
-    pub input_count: usize
-}
-impl<I: Sharable, O: Sharable> BuildingNode<I, O> {
-    pub fn new() -> Self {
-        BuildingNode {
-            id: NODE_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            name: String::new(),
-            step: None,
-            inputs: Vec::new(),
-            outputs: Vec::new(),
-            tap: None,
-            input_count: 1,
-            successors: HashMap::new(),
-        }
-    }
-}
-impl<I: Sharable, O: Sharable> CollectibleThreadPrecursor for BuildingNode<I, O> {
-    fn add_input<I: Sharable>(&mut self, receiver: WrappedReceiver<I>) {
-        self.inputs.push(receiver)
-    }
-
-    fn add_output<O: Sharable>(&mut self, sender: WrappedSender<O>) {
-        self.outputs.push(sender)
-    }
-
-    fn clear_outputs(&mut self) {
-        self.outputs.clear();
-    }
-
-    fn attach_step<I: Sharable, O: Sharable>(&mut self, step: impl PipelineStep<I, O>) {
-        self.step = Some(Box::new(step));
-    }
-
-    fn attach_tap<I: Sharable>(&mut self, tap: PipelineTap<I>) {
-        self.tap = Some(tap);
-    }
-
-    fn set_required_input_count(&mut self, count: usize) {
-        self.input_count = count;
-    }
-
-    fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-
-    fn get_id(&self) -> usize {
-        self.id
-    }
-    fn into_collectible_thread<I: Sharable, O: Sharable>(mut self) -> Box<dyn CollectibleThread> {
-        if self.step.is_none() { 
-            panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
-        }
-        let step = self.step.take().unwrap();
-        let new_node: PipelineNode<I, O> = PipelineNode::new(step, self.inputs.take(), self.outputs.take(), self.tap.take());
-        Box::new(
-            PipelineNode::new(step, self.inputs, self.outputs, self.tap)
-        )
-    }
-}
-
-pub struct NodeBuilder<I: Sharable, O: Sharable> {
-    node: Box<dyn CollectibleThreadPrecursor>,
-    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
+pub struct PipelineBuildVector {
+    nodes: Vec<Box<dyn CollectibleThread>>,
     parameters: PipelineParameters,
 }
+impl PipelineBuildVector {
+    pub fn new(pipeline_parameters: PipelineParameters) -> Self {
+        PipelineBuildVector {
+            nodes: Vec::new(),
+            parameters: pipeline_parameters,
+        }
+    }
+    pub fn add_node<I: Sharable, O: Sharable>(&mut self, node: BuildingNode<I, O>) {
+        self.nodes.push(node);
+    }
+
+    pub fn consume(self) -> Vec<Box<dyn CollectibleThreadPrecursor>> {
+        self.nodes
+    }
+
+    pub fn get_node(&mut self, id: usize) -> &mut Box<dyn CollectibleThreadPrecursor> {
+        self.nodes.get_mut(id).unwrap()
+    }
+
+    pub fn get_parameters(&self) -> &PipelineParameters {
+        &self.parameters
+    }
+}
+
+
+pub struct NodeBuilder<I: Sharable, O: Sharable> {
+    node_predecessor: usize,
+    build_vector: Rc<RefCell<PipelineBuildVector>>,
+}
 impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
+    pub fn get_node_id(&self) -> usize {
+        self.node_predecessor
+    }
     pub fn attach<F: Sharable>(
-        mut self,
+        &mut self,
         name: String,
         step: impl PipelineStep<I, O> + 'static,
-        critical_channel: bool,
     ) -> NodeBuilder<O, F> {
         // attach a step to the selected node (self) and create a thread
         // produce a successor node to continue the pipeline
-        let (mut sender, mut receiver) = channel_wrapped::<O>(self.parameters.backpressure_val);
-        let mut successor: Box<dyn CollectibleThreadPrecursor> = Box::new(BuildingNode::new());
-        sender.set_dest_id(successor.get_id());
-        receiver.set_source_id(self.node.get_id());
+        let (mut sender, mut receiver) = channel_wrapped::<O>(
+            self.build_vector
+                .get_mut()
+                .get_parameters()
+                .backpressure_val,
+        );
+        let mut new_node = BuildingNode::new();
+        sender.set_dest_id(new_node.get_id());
+        receiver.set_source_id(self.node_predecessor);
 
-        self.node.set_name(name);
+        new_node.set_name(name);
+        new_node.attach_step(Box::new(step));
 
-        self.node.add_output(sender);
-        successor.add_input(receiver);
+        self.build_vector
+            .get_mut()
+            .get_node(self.node_predecessor)
+            .add_output(sender);
+        new_node.add_input(receiver);
 
-        self.build_vector.push(self.node);
+        let new_id = new_node.get_id();
+        self.build_vector.get_mut().add(new_node);
 
         NodeBuilder {
-            node: successor,
+            node_predecessor: new_id,
             build_vector: self.build_vector,
-            parameters: self.parameters
         }
     }
-    
-    pub fn test(&mut self) -> &mut Self {
-        return self;
-    }
 
-    pub fn cap_pipeline(mut self, name: String, step: impl PipelineStep<I, O> + 'static + Sink)
-    where
+    pub fn add_pipeline_sink(
+        mut self,
+        name: String,
+        step: impl PipelineStep<I, O> + 'static + Sink,
+    ) -> Self where
         O: Unit,
     {
         // End a linear pipeline branch, allowing the step itself to handle output to other parts of the program
-        self.node.set_name(name);
-        self.node.clear_outputs();
+        let (mut sender, mut receiver) = channel_wrapped::<O>(
+            self.build_vector
+                .get_mut()
+                .get_parameters()
+                .backpressure_val,
+        );
+        let mut new_node = BuildingNode::new();
+        sender.set_dest_id(new_node.get_id());
+        receiver.set_source_id(self.node_predecessor);
+        new_node.attach_step(Box::new(step));
 
-        self.build_vector.push(self.node);
+        new_node.set_name(name);
+
         self.build_vector
+            .get_mut()
+            .get_node(self.node_predecessor)
+            .add_output(sender);
+        new_node.add_input(receiver);
+
+        self.build_vector.get_mut().add_node(Box::new(new_node));
+        self
     }
 
-    pub fn start_pipeline<F: Sharable>(
+    pub fn add_pipeline_source<F: Sharable>(
         name: String,
         source_step: impl PipelineStep<I, O> + 'static + Source,
-        mut build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
-        parameters: PipelineParameters,
+        mut build_vector: Rc<RefCell<PipelineBuildVector>>,
     ) -> NodeBuilder<O, F>
     where
         I: Unit,
     {
         // start a pipeline, allowing the step itself to handle input from other parts of the program
-        let (sender, receiver) = channel_wrapped::<O>(parameters.backpressure_val);
-
         let mut start_node = BuildingNode::new();
         start_node.set_name(name);
-        start_node.add_output(sender);
-        start_node.attach_step(Some(Box::new(source_step)));
+        start_node.attach_step(Box::new(source_step));
 
-        let mut successor: BuildingNode<O, F> = BuildingNode::new();
-        successor.add_input(receiver);
-        
-        build_vector.push(start_node);
+        let node_id = start_node.get_id();
+        build_vector.get_mut().add_node(Box::new(start_node));
 
         NodeBuilder {
-            node: successor,
-            parameters,
-            build_vector
+            node_predecessor: node_id,
+            build_vector,
         }
     }
-
-    pub fn split_begin(mut self) -> SplitBuilder<I, O> {
-        SplitBuilder {
-            node: self.node,
-            parameters: self.parameters,
-            build_vector: self.build_vector,
-        }
-    }
-
-    pub fn branch_end(mut self, joint_builder: &mut JointBuilder<I, O>) {
-        match self.node.input {
-            NodeReceiver::SI(receiver) => joint_builder.joint_add(receiver.extract_receiver()),
-            NodeReceiver::Dummy => panic!("Cannot end branch with Dummy"),
-            _ => panic!("Must end branch with single. This should be automatic behavior"),
-        }
-    }
-    
-    pub fn extract_receiver(self) -> WrappedReceiver<O> {
-        return self.node.re
-    }
-}
-
-pub fn joint_begin<JI: Sharable, JO: Sharable>(
-    name: String,
-    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
-    parameters: PipelineParameters
-) -> JointBuilder<JI, JO> {
-    // create a node marked as a joint which can take multiple input receivers. used to join multiple sub branches together (eg adder or something)
-    let mut join_node: BuildingNode<JI, JO> = BuildingNode::new();
-    join_node.set_name(name);
-    JointBuilder {
-        node: Box::new(join_node),
-        build_vector,
-        parameters
-    }
-}
-
-pub struct SplitBuilder<I: Sharable, O: Sharable> {
-    node: Box<dyn CollectibleThreadPrecursor>,
-    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
-    parameters: PipelineParameters,
-}
-impl<I: Sharable, O: Sharable> SplitBuilder<I, O> {
-    pub fn split_add<F: Sharable>(&mut self, name: String) -> NodeBuilder<O, F> {
-        // equivalent of start_pipeline for a subbranch of a flow diagram. generates an entry in the split for the branch
-        // returns the head of the new branch which can be attached to like a normal linear pipeline
-        let (sender, receiver) = channel_wrapped::<O>(self.parameters.backpressure_val);
-
-        let mut branch_node = BuildingNode::new();
-        branch_node.set_name(name);
-        self.node.add_output(sender);
-        branch_node.add_input(receiver);
-
-        let 
-        successor.add_input(receiver);
-
-        build_vector.push(start_node);
-
-        NodeBuilder {
-            node: successor,
-            parameters,
-            build_vector
-        }
-    }
-
-    pub fn split_lock(self, step: impl PipelineStep<I, O> + 'static) {
-        // submit the split to the thread pool, preventing any more branches from being added and making it computable
-        let new_thread =
-            PipelineThread::new(step, self.node, self.parameters.clone());
-        self.construction_queue.push(new_thread);
-    }
-}
-
-pub struct LazyJointInputBuilder<I: Sharable, O: Sharable> {
-    node: Box<dyn CollectibleThreadPrecursor>,
-    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
-    parameters: PipelineParameters,
-}
-impl<I: Sharable, O: Sharable> LazyJointInputBuilder<I, O> {
-    pub fn joint_link_lazy(
-        mut self,
-        id: &'static str,
-        step: impl PipelineStep<I, O>,
-        source_node: NodeBuilder<I, O>,
-    ) {
-        // takes the final node of a branch and attaches it to a lazy node's input. You must still assign the lazy node input with joint_lazy_finalize
-        self.node.set_id(id);
-
-        match source_node.node.input {
-            NodeReceiver::SI(receiver) => {
-                self.node.input = NodeReceiver::SI(receiver);
-                let new_thread = PipelineThread::new(
-                    step,
-                    self.node,
-                    self.parameters.clone(),
-                );
-                self.construction_queue.push(new_thread);
-            }
-            _ => panic!("Feedback joint cannot handle multiple input previous node"),
-        }
-    }
-}
-
-pub struct JointBuilder<I: Sharable, O: Sharable> {
-    node: Box<dyn CollectibleThreadPrecursor>,
-    build_vector: Rc<RefCell<Vec<Box<dyn CollectibleThreadPrecursor>>>>,
-    parameters: PipelineParameters,
-}
-impl<I: Sharable, O: Sharable> JointBuilder<I, O> {
-    fn joint_add_linear(&mut self, mut input_builder: NodeBuilder<I, O>) {
-        // attach an input to a joint
-        let (sender, receiver) = channel_wrapped::<O>(self.parameters.backpressure_val);
-        self.node.add_input(receiver);
-        
-        self.build_vector.push(Box::new(input_node));
-    }
-
-    pub fn joint_lock<F: Sharable>(
-        mut self,
+    pub fn create_joint_node(
         name: String,
         step: impl PipelineStep<I, O> + 'static,
-        critical_channel: bool,
-    ) -> NodeBuilder<O, F> {
-        self.node.
+        mut build_vector: Rc<RefCell<PipelineBuildVector>>,
+    ) -> NodeBuilder<I, O> {
+        let mut new_node = BuildingNode::new();
+        new_node.set_name(name);
+        new_node.attach_step(Box::new(step));
+
+        let new_id = new_node.get_id();
+        build_vector.get_mut().add_node(Box::new(new_node));
+
+        NodeBuilder {
+            node_predecessor: new_id,
+            build_vector,
+        }
+    }
+    pub fn feed_into(mut self, joint_builder: &mut NodeBuilder<I, O>) -> Self {
+        let (mut sender, mut receiver) = channel_wrapped::<O>(
+            self.build_vector
+                .get_mut()
+                .get_parameters()
+                .backpressure_val,
+        );
+        sender.set_dest_id(joint_builder.get_node_id());
+        receiver.set_source_id(self.node_predecessor);
+
+        self.build_vector
+            .get_mut()
+            .get_node(self.node_predecessor)
+            .add_output(sender);
+        self.build_vector
+            .get_mut()
+            .get_node(joint_builder.get_node_id())
+            .add_input(receiver);
+
+        self
     }
 
-    pub fn joint_add_lazy<F: Sharable>(&mut self, critical_channel: bool) -> LazyJointInputBuilder<F, I> {
-        // creates an empty placeholder node for a joint that can be made concrete later to facilitate feedback architecture
-        let channel_metadata: ChannelMetadata = ChannelMetadata::new(self.node.id.clone(), critical_channel);
-        let (sender, receiver) = channel_wrapped(self.parameters.backpressure_val, channel_metadata);
-        match &mut self.node.input {
-            NodeReceiver::MI(node_receiver) => {
-                node_receiver.add_receiver(receiver);
-            }
-            _ => panic!("Cannot add lazy feedback node to a node which was not declared as a joint with joint_begin")
-        };
-
-        let mut lazy_node = PipelineNode::new();
-        lazy_node.output = NodeSender::SO(SingleSender::new(sender));
-
-        LazyJointInputBuilder {
-            node: lazy_node,
-            parameters: self.parameters.clone(),
-            construction_queue: self.construction_queue.clone(),
-            state: self.state.clone(),
-        }
+    pub fn add_initial_state(mut self, initial_state: O) -> Self {
+        // must perform loop detection at construction time to verify that all loops produce a base value to avoid starting lockups
+        self.build_vector[self.node_predecessor].add_initial_state(initial_state);
+        self
     }
 }
 
@@ -314,4 +190,78 @@ pub trait PipelineRecipe<I: Sharable, O: Sharable> {
         origin_node: PipelineNode<FI, I>,
         construction_queue: ConstructionQueue,
     ) -> PipelineNode<O, FO>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Intermediary {}
+    impl PipelineStep<u32, u32> for Intermediary {
+        fn run_SISO(&mut self, input: u32) -> Result<ODFormat<u32>, ()> {
+            Ok(ODFormat::Standard(input + 1))
+        }
+    }
+
+    struct SourceD {}
+    impl PipelineStep<(), u32> for SourceD {
+        fn run_DISO(&mut self) -> Result<ODFormat<u32>, ()> {
+            Ok(ODFormat::Standard(1))
+        }
+    }
+    impl Source for SourceD {}
+
+    struct SinkD {}
+    impl PipelineStep<u32, ()> for SinkD {
+        fn run_SIDO(&mut self, input: u32) -> Result<ODFormat<()>, ()> {
+            Ok(ODFormat::Standard(()))
+        }
+    }
+    impl Sink for SinkD {}
+
+    #[test]
+    fn test_basic_source_sink() {
+        let mut build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
+            PipelineParameters::new(1, 1, 128, 1, 1, 1),
+        )));
+
+        NodeBuilder::add_pipeline_source(
+            String::from("TestSource"),
+            SourceD {},
+            build_vector.clone(),
+        ).add_pipeline_sink(String::from("TestSink"), SinkD {});
+
+        let build_vector = build_vector.into_inner();
+        let vector_internal = build_vector.consume();
+        assert_eq!(vector_internal.len(), 2);
+
+        // Check internal values for the two nodes (source then sink)
+        let source_node: &BuildingNode<(), u32> = unsafe {
+            &*(((vector_internal[0].as_ref() as *const dyn CollectibleThreadPrecursor) as *const ())
+                as *const BuildingNode<(), u32>)
+        };
+        let sink_node: &BuildingNode<u32, ()> = unsafe {
+            &*(((vector_internal[1].as_ref() as *const dyn CollectibleThreadPrecursor) as *const ())
+                as *const BuildingNode<u32, ()>)
+        };
+
+        assert_eq!(source_node.name, "TestSource");
+        assert!(source_node.step.is_some());
+        assert_eq!(source_node.inputs.len(), 0);
+        assert_eq!(source_node.outputs.len(), 1);
+        assert_eq!(source_node.input_count, 1);
+        assert!(source_node.successors.is_empty());
+        assert!(source_node.initial_state.is_none());
+
+        assert_eq!(sink_node.name, "TestSink");
+        assert!(sink_node.step.is_some());
+        assert_eq!(sink_node.inputs.len(), 1);
+        assert_eq!(sink_node.outputs.len(), 0);
+        assert_eq!(sink_node.input_count, 1);
+        assert!(sink_node.successors.is_empty());
+        assert!(sink_node.initial_state.is_none());
+
+        assert_eq!(*source_node.outputs[0].get_dest_id(), sink_node.id);
+        assert_eq!(sink_node.inputs[0].get_source_id(), source_node.id);
+    }
 }

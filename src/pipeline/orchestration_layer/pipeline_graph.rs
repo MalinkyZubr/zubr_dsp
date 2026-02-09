@@ -4,7 +4,7 @@ use atomic_enum::atomic_enum;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use itertools::Itertools;
-use crate::pipeline::construction_layer::builders::BuildingNode;
+use crate::pipeline::construction_layer::builders::{BuildingNode, PipelineBuildVector};
 
 pub struct PipelineAdjacencyEdge {
     source_id: usize,
@@ -77,6 +77,10 @@ impl PipelineAdjacencyNode {
         }
     }
 
+    pub fn has_initial_state(&self) -> bool {
+        self.thread_object.lock().unwrap().has_initial_state()
+    }
+
     pub fn exit_execution(&self) {
         self.currently_running.store(false, Ordering::Release);
     }
@@ -131,14 +135,18 @@ pub struct PipelineGraph {
 }
 impl PipelineGraph {
     fn create_graph_nodes(
-        build_vector: Vec<BuildingNode>,
+        build_vector: PipelineBuildVector,
     ) -> (Vec<Arc<PipelineAdjacencyNode>>, Vec<(usize, HashMap<usize, usize>)>) {
+        let build_vector = build_vector.consume();
         let mut partial_downstream_vec = Vec::with_capacity(build_vector.len());
         let mut adjacency_vec: Vec<(usize, HashMap<usize, usize>)> = Vec::with_capacity(build_vector.len());
 
         for node in build_vector { //
-            adjacency_vec.push((node.id, node.successors));
-            let adj_node = PipelineAdjacencyNode::new(Mutex::new(node.thread), node.id, node.name);
+            let (converted_node, successors) = node.into_collectible_thread();
+            let node_id = converted_node.get_id();
+            let node_name = converted_node.get_name();
+            adjacency_vec.push((node_id, successors));
+            let adj_node = PipelineAdjacencyNode::new(Mutex::new(converted_node), node_id, node_name);
 
             partial_downstream_vec.push(Arc::new(adj_node)); // places the predecessors in the adjacency node
         } // Data type: Silly
@@ -171,7 +179,7 @@ impl PipelineGraph {
         }
     }
 
-    pub fn new(build_vector: Vec<BuildingNode>) -> Self {
+    pub fn new(build_vector: PipelineBuildVector) -> Self {
         let (mut partial_downstream_vec, adj_vec) = Self::create_graph_nodes(build_vector);
         Self::attach_edges(&mut partial_downstream_vec, adj_vec);
         Self {
@@ -189,6 +197,18 @@ impl PipelineGraph {
         }
 
         sources
+    }
+
+    pub fn get_all_initially_stateful(&self) -> Vec<usize> {
+        let mut nodes: Vec<usize> = Vec::new();
+
+        for (index, thread_obj) in self.adjacency_list.iter().enumerate() {
+            if thread_obj.has_initial_state() {
+                nodes.push(index);
+            }
+        }
+
+        nodes
     }
 
     pub fn get_node(&self, node_id: usize) -> Option<Arc<PipelineAdjacencyNode>> {
@@ -263,7 +283,15 @@ impl PipelineGraph {
             None => Vec::new()
         }
     }
-    
+
+    fn detect_improperly_handled_loops(&self) -> bool {
+        todo!()
+    }
+
+    pub fn get_all_predecessors(&self, node_id: usize) -> Vec<usize> {
+        todo!()
+    }
+
     pub fn start_all(&self) {
         
     }

@@ -5,4 +5,3 @@ pub mod pipeline_recipe;
 pub mod builders;
 pub mod pipeline_step;
 pub mod pipeline_traits;
-pub mod pipeline_tap;

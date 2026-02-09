@@ -163,6 +163,14 @@ impl ThreadPoolTopographicalHandle {
                 TaskType::Compute,
             );
         }
+        let initially_stateful = self.graph.get_all_initially_stateful();
+        for node in initially_stateful {
+            ThreadPoolTopographical::task_submit(
+                node,
+                self.master_pool.clone(),
+                TaskType::Senders
+            )
+        }
     }
 }
 

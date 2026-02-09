@@ -1,18 +1,20 @@
+use std::collections::HashMap;
 use crate::pipeline::api::*;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::communication_layer::formats::{ODFormat, ReceiveType};
 use crate::pipeline::construction_layer::pipeline_step::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_tap::PipelineTap;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::fmt::Debug;
+use std::future::Future;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
+use async_trait::async_trait;
 
 #[derive(Debug, Copy, Clone)]
 struct DummyStep {}
 impl<T: Sharable> PipelineStep<T, T> for DummyStep {
-    fn run_SISO(&mut self, input: T) -> Result<ODFormat<T>, String> {
+    fn run_SISO(&mut self, input: T) -> Result<ODFormat<T>, ()> {
         Ok(ODFormat::Standard(input))
     }
 }
@@ -41,19 +43,19 @@ pub struct PipelineNode<I: Sharable, O: Sharable> {
     input: Vec<WrappedReceiver<I>>,
     output: Vec<WrappedSender<O>>,
     step: Box<dyn PipelineStep<I, O>>,
-    tap: Option<PipelineTap<I>>,
     node_status: NodeStatus,
+    initial_state: Option<ODFormat<O>>,
     buffered_data: Option<ODFormat<O>>,
 }
 impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
-    pub fn new(step: Box<dyn PipelineStep<I, O>>, input: Vec<WrappedReceiver<I>>, output: Vec<WrappedSender<O>>, tap: Option<PipelineTap<I>>) -> PipelineNode<I, O> {
+    pub fn new(step: Box<dyn PipelineStep<I, O>>, input: Vec<WrappedReceiver<I>>, output: Vec<WrappedSender<O>>, initial_state: Option<ODFormat<O>>) -> PipelineNode<I, O> {
         PipelineNode {
             input,
             output,
-            tap,
             node_status: NodeStatus::new(),
             step,
-            buffered_data: None,
+            buffered_data: initial_state.clone(),
+            initial_state: initial_state,
         }
     }
 
@@ -129,27 +131,80 @@ impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
     }
 }
 
-pub trait CollectibleThreadPrecursor {
-    fn add_input<I: Sharable>(&mut self, receiver: WrappedReceiver<I>);
-    fn add_output<O: Sharable>(&mut self, sender: WrappedSender<O>);
-    fn attach_step<I: Sharable, O: Sharable>(&mut self, step: Box<dyn PipelineStep<I, O>>);
-    fn attach_tap<I: Sharable>(&mut self, tap: PipelineTap<I>);
-    fn set_required_input_count(&mut self, count: usize);
-    fn set_name(&mut self, name: String);
-    fn get_id(&self) -> usize;
-    fn clear_outputs(&mut self);
-    fn extract_input<I: Sharable>(&mut self) -> Vec<WrappedReceiver<I>>;
-    fn into_collectible_thread<I: Sharable, O: Sharable>(self) -> Box<dyn CollectibleThread>;
+
+pub struct BuildingNode<I: Sharable, O: Sharable> {
+    id: usize,
+    name: String,
+    step: Option<Box<dyn PipelineStep<I, O>>>,
+    inputs: Vec<WrappedReceiver<I>>,
+    outputs: Vec<WrappedSender<O>>,
+    successors: HashMap<usize, usize>, // (id, num executions)
+    input_count: usize,
+    initial_state: Option<ODFormat<O>>,
+}
+impl<I: Sharable, O: Sharable> BuildingNode<I, O> {
+    fn add_input(&mut self, receiver: WrappedReceiver<I>) {
+        self.inputs.push(receiver)
+    }
+
+    fn add_output(&mut self, sender: WrappedSender<O>) {
+        self.outputs.push(sender)
+    }
+
+    fn clear_outputs(&mut self) {
+        self.outputs.clear();
+    }
+
+    fn attach_step(&mut self, step: impl PipelineStep<I, O>) {
+        self.step = Some(Box::new(step));
+    }
+
+    fn set_required_input_count(&mut self, count: usize) {
+        self.input_count = count;
+    }
+
+    fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_name(&self) -> String {
+        self.name
+    }
+    fn into_collectible_thread(mut self) -> (Box<dyn CollectibleThread>, HashMap<usize, usize>) {
+        if self.step.is_none() {
+            panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
+        }
+        let step = self.step.take().unwrap();
+        let new_node: PipelineNode<I, O> = PipelineNode::new(
+            step,
+            self.inputs.take(),
+            self.outputs.take(),
+            self.initial_state.take(),
+        );
+        (Box::new(new_node), self.successors)
+    }
+    fn add_initial_state(&mut self, initial_state: O) {
+        self.initial_state = Some(initial_state);
+    }
 }
 
+
+#[async_trait]
 pub trait CollectibleThread: Send {
-    fn call_thread(&mut self, id: &usize);
-    async fn run_senders(&mut self, id: &usize, increment_size: &mut usize); // runs a join set and waits for all tasks in that set to finish
-    fn clone_output_stop_flag(&self, id: usize) -> Arc<AtomicBool>;
+    fn call_thread(&mut self, id: usize);
+    async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize>; // runs a join set and waits for all tasks in that set to finish
+    fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>>;
+    fn load_initial_state(&mut self);
+    fn has_initial_state(&self) -> bool;
 }
 
+
+#[async_trait]
 impl<I: Sharable, O: Sharable> CollectibleThread for PipelineNode<I, O> {
-    fn call_thread(&mut self, id: &usize) {
+    fn call_thread(&mut self, id: usize) {
         log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
 
@@ -175,7 +230,7 @@ impl<I: Sharable, O: Sharable> CollectibleThread for PipelineNode<I, O> {
         );
     }
 
-    async fn run_senders(&mut self, id: &usize, increment_size: &mut usize) -> Vec<usize> {
+    async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
         match self.buffered_data.take() {
             Some(output_data) => output_data.send(&mut self.output, increment_size).await,
             None => {
@@ -192,5 +247,13 @@ impl<I: Sharable, O: Sharable> CollectibleThread for PipelineNode<I, O> {
             }
         }
         None
+    }
+
+    fn has_initial_state(&self) -> bool {
+        self.initial_state.is_some()
+    }
+
+    fn load_initial_state(&mut self) {
+        self.buffered_data = self.initial_state.clone()
     }
 }
