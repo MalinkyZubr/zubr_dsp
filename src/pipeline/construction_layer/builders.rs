@@ -55,6 +55,7 @@ impl<I: Sharable, O: Sharable> NodeBuilder<I, O> {
         &mut self,
         name: String,
         step: impl PipelineStep<I, O> + 'static,
+        input_quantity_demand: usize,
     ) -> NodeBuilder<O, F> {
         // attach a step to the selected node (self) and create a thread
         // produce a successor node to continue the pipeline

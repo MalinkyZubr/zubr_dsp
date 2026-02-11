@@ -38,16 +38,16 @@ impl NodeStatus {
     }
 }
 
-pub struct PipelineNode<I: Sharable, O: Sharable> {
+pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
-    input: Vec<WrappedReceiver<I>>,
-    output: Vec<WrappedSender<O>>,
+    input: [WrappedReceiver<I>; NI],
+    output: [WrappedSender<O>; NO],
     step: Box<dyn PipelineStep<I, O>>,
     node_status: NodeStatus,
     initial_state: Option<ODFormat<O>>,
     buffered_data: Option<ODFormat<O>>,
 }
-impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I, O, NI, NO> {
     pub fn new(step: Box<dyn PipelineStep<I, O>>, input: Vec<WrappedReceiver<I>>, output: Vec<WrappedSender<O>>, initial_state: Option<ODFormat<O>>) -> PipelineNode<I, O> {
         PipelineNode {
             input,
@@ -132,7 +132,7 @@ impl<I: Sharable, O: Sharable> PipelineNode<I, O> {
 }
 
 
-pub struct BuildingNode<I: Sharable, O: Sharable> {
+pub struct BuildingNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     id: usize,
     name: String,
     step: Option<Box<dyn PipelineStep<I, O>>>,
@@ -142,7 +142,7 @@ pub struct BuildingNode<I: Sharable, O: Sharable> {
     input_count: usize,
     initial_state: Option<ODFormat<O>>,
 }
-impl<I: Sharable, O: Sharable> BuildingNode<I, O> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
     fn add_input(&mut self, receiver: WrappedReceiver<I>) {
         self.inputs.push(receiver)
     }
@@ -171,14 +171,14 @@ impl<I: Sharable, O: Sharable> BuildingNode<I, O> {
         self.id
     }
     fn get_name(&self) -> String {
-        self.name
+        self.name.clone()
     }
     fn into_collectible_thread(mut self) -> (Box<dyn CollectibleThread>, HashMap<usize, usize>) {
         if self.step.is_none() {
             panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
         }
         let step = self.step.take().unwrap();
-        let new_node: PipelineNode<I, O> = PipelineNode::new(
+        let new_node: PipelineNode<I, O, NI, NO> = PipelineNode::new(
             step,
             self.inputs.take(),
             self.outputs.take(),
@@ -203,7 +203,7 @@ pub trait CollectibleThread: Send {
 
 
 #[async_trait]
-impl<I: Sharable, O: Sharable> CollectibleThread for PipelineNode<I, O> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleThread for PipelineNode<I, O, NI, NO> {
     fn call_thread(&mut self, id: usize) {
         log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
