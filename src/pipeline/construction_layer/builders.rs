@@ -3,7 +3,7 @@ use crate::pipeline::communication_layer::comms_core::{
     channel_wrapped, WrappedReceiver, WrappedSender,
 };
 use crate::pipeline::communication_layer::formats::ODFormat;
-use crate::pipeline::construction_layer::pipeline_node::{BuildingNode, CollectibleThread, CollectibleThreadPrecursor, PipelineNode};
+use crate::pipeline::construction_layer::pipeline_node::{BuildingNode, CollectibleThread, PipelineNode};
 use crate::pipeline::construction_layer::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
 use crate::pipeline::orchestration_layer::pipeline::ConstructionQueue;

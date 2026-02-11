@@ -141,6 +141,7 @@ pub struct BuildingNode<I: Sharable, O: Sharable, const NI: usize, const NO: usi
     successors: HashMap<usize, usize>, // (id, num executions)
     input_count: usize,
     initial_state: Option<ODFormat<O>>,
+    submitted: bool
 }
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
     fn add_input(&mut self, receiver: WrappedReceiver<I>) {
@@ -184,10 +185,18 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
             self.outputs.take(),
             self.initial_state.take(),
         );
+        self.submitted = true;
         (Box::new(new_node), self.successors)
     }
     fn add_initial_state(&mut self, initial_state: O) {
         self.initial_state = Some(initial_state);
+    }
+}
+impl<I: Sharable, O: Sharable> Drop for BuildingNode<I, O> {
+    fn drop(&mut self) {
+        if !self.submitted {
+            panic!("BuildingNode ID {} {} was not submitted to the pipeline", self.id, self.name);
+        }
     }
 }
 
