@@ -6,9 +6,9 @@ use std::sync::mpmc::RecvTimeoutError;
 use std::sync::mpsc::{Receiver, SyncSender};
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver, error::SendError as TokioSendError};
 use std::time::Duration;
-use crate::pipeline::communication_layer::formats::ReceiveType;
 
 
+#[derive(Debug)]
 pub struct WrappedSender<T: Sharable> {
     dest_id: usize,
     is_stopped: Arc<AtomicBool>,
@@ -59,25 +59,8 @@ impl<T: Sharable> WrappedReceiver<T> {
         }
     }
 
-    pub fn recv(&mut self) -> Result<ReceiveType<T>, ()> {
-        if self.num_receives > 1 {
-            let mut receive_vector = Vec::with_capacity(self.num_receives);
-
-            for _ in 0..self.num_receives {
-                let recv_value = self.receiver.blocking_recv();
-                match recv_value {
-                    Some(x) => receive_vector.push(x),
-                    None => return Err(())
-                }
-            }
-            Ok(ReceiveType::Reassembled(receive_vector))
-        }
-        else {
-            match self.receiver.recv() {
-                Ok(x) => Ok(ReceiveType::Single(x)),
-                Err(_) => Err(())
-            }
-        }
+    pub fn recv(&mut self) -> Option<T> {
+        self.receiver.blocking_recv()
     }
 
     pub fn set_num_receives(&mut self, num_receives: usize) {

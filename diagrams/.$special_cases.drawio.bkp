@@ -1,0 +1,37 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.2.5 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36" version="28.2.5">
+  <diagram name="Page-1" id="NGP6kdDRcOwxPHhnEOOg">
+    <mxGraphModel dx="431" dy="848" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="DtVYKYvhivc_cz4grxBP-1" value="I want to be able to do interleaved data, and series data. But I dont want to force the user to know about it. I need a separate block or node type to manage these" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-2" value="if I encapsulate node types in an enum I decouple data transfer behavior from the step definiton. This would be a positive change" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="260" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-3" value="NodeTypeEnum" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="450" width="360" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-4" value="NODE&amp;lt;PipelineNode&amp;lt;I, O&amp;gt;, NI&amp;gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="DtVYKYvhivc_cz4grxBP-3">
+          <mxGeometry y="30" width="360" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-5" value="INTERLEAVE&amp;lt;Interleaver&amp;lt;Vec&amp;lt;I&amp;gt;, Vec&amp;lt;I&amp;gt;&amp;gt;, CHANNELS&amp;gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="DtVYKYvhivc_cz4grxBP-3">
+          <mxGeometry y="60" width="360" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-7" value="DECONSTRUCT&amp;lt;Deconstructor&amp;lt;Vec&amp;lt;I&amp;gt;, I&amp;gt;&amp;gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="DtVYKYvhivc_cz4grxBP-3">
+          <mxGeometry y="90" width="360" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-8" value="RECONSTRUCT&amp;lt;Reconstructor&amp;lt;I, Vec&amp;lt;I&amp;gt;&amp;gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="DtVYKYvhivc_cz4grxBP-3">
+          <mxGeometry y="120" width="360" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-11" value="LIMITED_JOINT&amp;lt;LimitedJoint&amp;lt;[I; NI], O&amp;gt;, NI&amp;gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="DtVYKYvhivc_cz4grxBP-3">
+          <mxGeometry y="150" width="360" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="DtVYKYvhivc_cz4grxBP-14" value="PipelineStep&amp;lt;I: Sharable, O: Sharable, const NI: usize&amp;gt; run(&amp;amp;mut self, input: [I; NI]) -&amp;gt; Result&amp;lt;O, ()&amp;gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry y="700" width="520" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
