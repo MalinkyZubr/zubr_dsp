@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
+use futures::SinkExt;
 use log::Level;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::communication_layer::formats::{ODFormat, ReceiveType};
 use crate::pipeline::construction_layer::node_types::pipeline_node::{CPUCollectibleThread, CollectibleThread, NodeStatus, PipelineNode};
 
 pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize>
@@ -23,20 +23,23 @@ impl<I: Sharable, const NUM_CHANNELS: usize> PipelineInterleavedSeparator<I, NUM
             input,
             output,
             node_status: NodeStatus::new(),
-            buffered_data: None
+            buffered_data: None,
         }
     }
 }
 
 
+#[async_trait::async_trait]
 impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleThread for PipelineInterleavedSeparator<I, NUM_CHANNELS> {
     async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
         match self.buffered_data.take() {
             Some(data) => {
-                for (value, sender) in self.output.iter_mut().zip(data) {
-                    // send here
+                for (index, val) in data.into_iter().enumerate() {
+                    self.output[index].send(val).await; // error handling later
                 }
+                vec![]
             }
+            _ => vec![]
         }
     }
     fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
@@ -52,10 +55,6 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleThread for PipelineInter
     }
     fn has_initial_state(&self) -> bool {
         false
-    }
-
-    fn get_id(&self) -> usize {
-        self.
     }
 }
 

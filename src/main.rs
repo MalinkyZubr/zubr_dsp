@@ -1,6 +1,7 @@
 #![feature(trait_alias)]
 #![feature(mpmc_channel, portable_simd, test)]
 #![feature(let_chains)]
+#![feature(adt_const_params)]
 
 mod pipeline;
 

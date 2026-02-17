@@ -76,7 +76,6 @@ pub trait CollectibleThread {
     fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>>;
     fn load_initial_state(&mut self);
     fn has_initial_state(&self) -> bool;
-    fn get_id(&self) -> usize;
 }
 
 

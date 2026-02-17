@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
+use futures::SinkExt;
 use log::Level;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::communication_layer::formats::ReceiveType;
 use crate::pipeline::construction_layer::node_types::pipeline_node::{CPUCollectibleThread, CollectibleThread, NodeStatus};
 
 pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize>
@@ -24,13 +24,18 @@ impl<I: Sharable, const NO: usize> PipelineSeriesReconstructor<I, NO> {
 }
 
 
-impl<I: Sharable> CollectibleThread for PipelineSeriesReconstructor<I> {
+#[async_trait::async_trait]
+impl<I: Sharable, const NO: usize> CollectibleThread for PipelineSeriesReconstructor<I, NO> {
     async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
-        let input = (0..self.receive_demands)
-            .map(|_| self.input.receive())
+        let input: Vec<I> = (0..self.receive_demands)
+            .map(|_| self.input.recv().unwrap()) // error handling later
             .collect();
-        self.output.send(input);
+        for sender in 0..self.output.len() - 1 {
+            self.output[sender].send(input.clone()).await;
+        }
+        self.output[self.output.len() - 1].send(input).await;
         *increment_size += 1;
+        vec![]
     }
     fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
         for sender in self.output.iter() {

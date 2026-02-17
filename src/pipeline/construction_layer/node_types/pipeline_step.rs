@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use crate::pipeline::communication_layer::formats::ODFormat;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
 // how can I make multiple input and output types more convenient?

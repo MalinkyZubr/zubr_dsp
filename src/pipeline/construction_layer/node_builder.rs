@@ -1,3 +1,4 @@
+use std::marker::ConstParamTy;
 use std::cell::RefCell;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
@@ -52,8 +53,8 @@ impl PipelineBuildVector {
             parameters: pipeline_parameters,
         }
     }
-    pub fn add_node<I: Sharable, O: Sharable, const NI: usize, const NO: usize>(&mut self, node: BuildingNode<I, O, NI, NO>) {
-        self.nodes.push(node.build());
+    pub fn add_node(&mut self, node: (PipelineNodeType, HashMap<usize, usize>)) {
+        self.nodes.push(node);
         self.nodes.sort_by(|a, b| a.0.get_id().cmp(&b.0.get_id()))
     }
 
@@ -70,6 +71,8 @@ impl PipelineBuildVector {
 static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(ConstParamTy)]
 pub enum IntoWhat {
     CPU_NODE,
     IO_NODE,
@@ -78,11 +81,13 @@ pub enum IntoWhat {
     RECONSTRUCTOR_NODE,
 }
 
+
 pub struct BuildingNode<
     I: Sharable,
     O: Sharable,
     const NI: usize,
     const NO: usize,
+    const Variant: IntoWhat,
 > {
     id: usize,
     name: String,
@@ -92,16 +97,16 @@ pub struct BuildingNode<
     successors: HashMap<usize, usize>,
     demanded_input_count: usize,
     initial_state: Option<O>,
-    into_what: IntoWhat,
 }
 impl<
         I: Sharable,
         O: Sharable,
         const NI: usize,
         const NO: usize,
-    > BuildingNode<I, O, NI, NO>
+        const Variant: IntoWhat,
+    > BuildingNode<I, O, NI, NO, Variant>
 {
-    pub fn new(into_what: IntoWhat, name: String) -> Self {
+    pub fn new(name: String) -> Self {
         Self {
             id: NODE_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             name,
@@ -111,7 +116,6 @@ impl<
             successors: HashMap::new(),
             demanded_input_count: 1,
             initial_state: None,
-            into_what
         }
     }
     pub fn add_input(&mut self, receiver: WrappedReceiver<I>) {
@@ -140,9 +144,11 @@ impl<
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
+
     pub fn add_initial_state(&mut self, initial_state: O) {
         self.initial_state = Some(initial_state);
     }
+
     fn into_node(mut self) -> (PipelineNode<I, O, NI, NO>, HashMap<usize, usize>) {
         if self.step.is_none() {
             panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
@@ -158,34 +164,26 @@ impl<
 
         (new_node, self.successors)
     }
+}
 
-    fn into_cpu_node(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO, {IntoWhat::IO_NODE}> {
+    pub fn build_io_node(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+        let id = self.id;
         let (new_node, successors) = self.into_node();
-        (PipelineNodeType::CPU(Box::new(new_node)), successors)
-    }
-
-    fn into_io_node(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
-        let (new_node, successors) = self.into_node();
-        (PipelineNodeType::IO(Box::new(new_node)), successors)
-    }
-    
-    fn build_std(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
-        if self.inputs.len() != NI {
-            panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
-        }
-        if self.outputs.len() != NO {
-            panic!("Incorrect number of outputs for BuildingNode ID {}", self.id);
-        }
-        
-        match &self.into_what {
-            IntoWhat::CPU_NODE => self.into_cpu_node(),
-            IntoWhat::IO_NODE => self.into_io_node(),
-            _ => panic!("Incorrect IntoWhat for BuildingNode ID {}", self.id)
-        }
+        (PipelineNodeType::IO(id, Box::new(new_node)), successors)
     }
 }
 
-impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, Vec<T>, 1, NO> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO, {IntoWhat::CPU_NODE}> {
+    pub fn build_cpu_node(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+        let id = self.id;
+        let (new_node, successors) = self.into_node();
+        (PipelineNodeType::CPU(id, Box::new(new_node)), successors)
+    }
+}
+
+
+impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, Vec<T>, 1, NO, {IntoWhat::INTERLEAVER_NODE}> {
     fn into_interleaved_separator(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -211,7 +209,7 @@ impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, Vec<T>, 1, NO> {
 impl<
     T: Sharable,
     const NO: usize,
-> BuildingNode<Vec<T>, T, 1, NO> {
+> BuildingNode<Vec<T>, T, 1, NO, {IntoWhat::DECONSTRUCTOR_NODE}> {
     fn into_series_deconstructor(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -238,7 +236,7 @@ impl<
 impl<
 T: Sharable,
     const NO: usize,
-> BuildingNode<T, Vec<T>, 1, NO> {
+> BuildingNode<T, Vec<T>, 1, NO, {IntoWhat::RECONSTRUCTOR_NODE}> {
     fn into_series_reconstructor(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
