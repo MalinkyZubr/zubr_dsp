@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use crate::pipeline::construction_layer::node_builder::{PipelineBuildVector};
 use atomic_enum::atomic_enum;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use crossbeam::utils::CachePadded;
 use itertools::Itertools;
+use scc::HashMap as SCCHashMap;
+use std::sync::Arc;
 use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
-use crate::pipeline::construction_layer::node_builder::{PipelineBuildVector, PipelineNodeType};
 
 #[atomic_enum]
 #[derive(PartialEq)]
@@ -14,239 +14,145 @@ pub enum PipelineNodeState {
     Error,
 }
 
-
-pub struct PipelineAdjacencyNode {
-    thread_object: Mutex<PipelineNodeType>,
-    current_state: Arc<PipelineNodeState>,
-    requested_state: Arc<PipelineNodeState>,
-    currently_running: AtomicBool,
-    node_id: usize,
-    node_name: String,
+#[derive(Debug, Clone)]
+pub struct NodeMasterReadData {
+    num_executions: usize,
+    last_execution_time_ns: u64,
+    current_state: PipelineNodeState,
 }
-impl PipelineAdjacencyNode {
-    pub fn new(thread_object: Mutex<Box<dyn CollectibleNode>>, id: usize, node_name: String) -> Self {
+impl NodeMasterReadData {
+    pub fn new() -> NodeMasterReadData {
+        NodeMasterReadData {
+            num_executions: 0,
+            last_execution_time_ns: 0,
+            current_state: PipelineNodeState::Stop,
+        }
+    }
+
+    pub fn update_analytics(&mut self, execution_time_ns: u64) {
+        self.num_executions += 1;
+        self.last_execution_time_ns = execution_time_ns;
+    }
+}
+
+// #[derive(Debug, Clone)]
+// pub struct NodeMasterWriteData {
+//     requested_state: PipelineNodeState,
+// }
+// impl NodeMasterWriteData {
+//     pub fn new() -> Self {
+//         Self {
+//             requested_state: PipelineNodeState::Stop,
+//         }
+//     }
+// }
+
+
+#[derive(Debug, Clone)]
+pub struct NodeImmutableData {
+    name: String,
+    is_source: bool,
+    is_sink: bool,
+    initially_stateful: bool,
+}
+impl NodeImmutableData {
+    pub fn new(name: String, is_source: bool, is_sink: bool, initially_stateful: bool) -> Self {
         Self {
-            thread_object,
-            node_id: id,
-            node_name,
-            currently_running: AtomicBool::new(false),
-            requested_state: Arc::new(PipelineNodeState::Stop),
-            current_state: Arc::new(PipelineNodeState::Stop)
+            name,
+            is_source,
+            is_sink,
+            initially_stateful,
         }
-    }
-
-    pub fn enter_execution(&self) {
-        self.currently_running.store(true, Ordering::Release);
-        for predecessor in self.get_predecessors() {
-            predecessor.record_consumption();
-        }
-    }
-
-    pub fn has_initial_state(&self) -> bool {
-        self.thread_object.lock().unwrap().has_initial_state()
-    }
-
-    pub fn exit_execution(&self) {
-        self.currently_running.store(false, Ordering::Release);
-    }
-
-    pub fn get_predecessors(&self) -> &Vec<Arc<PipelineAdjacencyEdge>> {
-        &self.predecessors
-    }
-
-    pub fn get_successors(&self) -> &Vec<Arc<PipelineAdjacencyEdge>> {
-        &self.successors
-    }
-
-    pub fn get_thread_object(&self) -> &Mutex<dyn CollectibleNode> {
-        &self.thread_object
-    }
-
-    pub fn get_name(&self) -> &String {
-        &self.node_name
-    }
-    pub fn get_id(&self) -> usize {
-        self.node_id
-    }
-
-    pub fn is_running(&self) -> bool {
-        *self.current_state == PipelineNodeState::Run
-    }
-
-    pub fn is_source(&self) -> bool {
-        self.predecessors.len() == 0
-    }
-
-    pub fn is_sink(&self) -> bool {
-        self.successors.len() == 0
-    }
-
-    pub fn predecessors_responsibility_fulfilled(&self) -> bool {
-        for predecessor in self.predecessors.iter() {
-            if !predecessor.responsibility_fulfilled() {
-                return false;
-            }
-        }
-        true
-    }
-
-    pub fn node_ready_execute(&self) -> bool {
-        self.predecessors_responsibility_fulfilled() && !self.currently_running.load(Ordering::Acquire)
     }
 }
 
 pub struct PipelineGraph {
-    adjacency_list: Arc<Vec<Arc<PipelineAdjacencyNode>>>,
+    state_request_array: Arc<[PipelineNodeState]>, // array to hold the requested state for each node. Can be modified by either neighbor nodes or the master thread
+    master_read_array: Arc<[CachePadded<NodeMasterReadData>]>, // holds data mutable to the compute threads. The master (main thread) should read analytics and metadata from here
+    node_immutable_data: Arc<[NodeImmutableData]>, // holds data that can be read by all but is immutable.
+    mutable_state_map: SCCHashMap<usize, Box<dyn CollectibleNode>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
 }
 impl PipelineGraph {
-    fn create_graph_nodes(
-        build_vector: PipelineBuildVector,
-    ) -> (Vec<Arc<PipelineAdjacencyNode>>, Vec<(usize, HashMap<usize, usize>)>) {
-        let build_vector = build_vector.consume();
-        let mut partial_downstream_vec = Vec::with_capacity(build_vector.len());
-        let mut adjacency_vec: Vec<(usize, HashMap<usize, usize>)> = Vec::with_capacity(build_vector.len());
-
-        for node in build_vector { //
-            let (converted_node, successors) = node.into_collectible_thread();
-            let node_id = converted_node.get_id();
-            let node_name = converted_node.get_name();
-            adjacency_vec.push((node_id, successors));
-            let adj_node = PipelineAdjacencyNode::new(Mutex::new(converted_node), node_id, node_name);
-
-            partial_downstream_vec.push(Arc::new(adj_node)); // places the predecessors in the adjacency node
-        } // Data type: Silly
-
-        (partial_downstream_vec, adjacency_vec)
-    }
-
-    fn attach_edges(
-        partial_downstream_vec: &mut Vec<Arc<PipelineAdjacencyNode>>,
-        mut adjacency_vec: Vec<(usize, HashMap<usize, usize>)>
-    ) {
-        for source_adjacency in adjacency_vec.iter_mut() {
-            for dest_adjacency in adjacency_vec.iter_mut() {
-                let source_id = source_adjacency.0;
-                let dest_id = dest_adjacency.0;
-                if dest_adjacency.1.contains(&source_id) {
-                    let stop_flag = partial_downstream_vec[source_id].thread_object.get_mut().unwrap().clone_stop_flag(dest_id);
-                    let new_edge = Arc::new(PipelineAdjacencyEdge {
-                        source_id: source_id,
-                        destination_id: dest_id,
-                        num_executions_since_completion: AtomicU64::new(0),
-                        num_executions_to_complete: *source_adjacency.1.get(&dest_id).unwrap() as u64,
-                        is_stopped: stop_flag
-                    });
-                    partial_downstream_vec[dest_adjacency.0].successors.push(new_edge.clone());
-                    partial_downstream_vec[source_adjacency.0].predecessors.push(new_edge.clone());
-                    source_adjacency.1.retain(|&x| x != dest_adjacency.0);
-                }
-            }
-        }
-    }
-
     pub fn new(build_vector: PipelineBuildVector) -> Self {
-        let (mut partial_downstream_vec, adj_vec) = Self::create_graph_nodes(build_vector);
-        Self::attach_edges(&mut partial_downstream_vec, adj_vec);
+        let nodes = build_vector.consume();
+        let state_request_vec = vec![PipelineNodeState::Stop; nodes.len()];
+        let mut master_read_vec = vec![CachePadded::new(NodeMasterReadData::new()); nodes.len()];
+        let mut node_immutable_data =
+            vec![NodeImmutableData::new(String::from(""), false, false, false); nodes.len()];
+        let mutable_state_map = SCCHashMap::with_capacity(nodes.len());
+
+        for (id, name, node) in nodes {
+            node_immutable_data[id] = NodeImmutableData::new(name, node.get_num_inputs() == 0, node.get_num_outputs() == 0, node.has_initial_state());
+            *master_read_vec[id] = NodeMasterReadData::new();
+            mutable_state_map.insert_sync(id, node);
+        }
         Self {
-            adjacency_list: Arc::new(partial_downstream_vec),
+            state_request_array: Arc::from(state_request_vec),
+            master_read_array: Arc::from(master_read_vec),
+            node_immutable_data: Arc::from(node_immutable_data),
+            mutable_state_map,
         }
     }
 
     pub fn get_all_sources(&self) -> Vec<usize> {
-        let mut sources: Vec<usize> = Vec::new();
-
-        for (index, thread_obj) in self.adjacency_list.iter().enumerate() {
-            if thread_obj.is_source() {
-                sources.push(index);
+        let mut sources = vec![];
+        for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
+            if immutable_data.is_source {
+                sources.push(id);
             }
         }
-
         sources
     }
 
-    pub fn get_all_initially_stateful(&self) -> Vec<usize> {
-        let mut nodes: Vec<usize> = Vec::new();
-
-        for (index, thread_obj) in self.adjacency_list.iter().enumerate() {
-            if thread_obj.has_initial_state() {
-                nodes.push(index);
+    pub fn get_all_sinks(&self) -> Vec<usize> {
+        let mut sinks = vec![];
+        for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
+            if immutable_data.is_sink {
+                sinks.push(id);
             }
         }
-
-        nodes
+        sinks
     }
 
-    pub fn get_node(&self, node_id: usize) -> Option<Arc<PipelineAdjacencyNode>> {
-        *self.adjacency_list.get(node_id).clone()
+    pub fn get_all_initially_stateful(&self) -> Vec<usize> {
+        let mut initially_stateful = vec![];
+        for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
+            if immutable_data.initially_stateful {
+                initially_stateful.push(id);
+            }
+        }
+        initially_stateful
+    }
+
+    pub fn get_node_name(&self, id: usize) -> String {
+        self.node_immutable_data[id].name.clone()
+    }
+
+    pub fn get_node_analytics(&self, id: usize) -> (usize, u64, PipelineNodeState) {
+        (
+            self.master_read_array[id].num_executions,
+            self.master_read_array[id].last_execution_time_ns,
+            self.master_read_array[id].current_state,
+        )
     }
 
     pub fn stop_sink(&self, id: usize) {
-        let nodes_to_stop = self.stop_sink_get_nodes(id);
-        for node_id in nodes_to_stop {
-            //self.adjacency_list[node_id].requested_state = Arc::new(PipelineNodeState::Stop); // find better way
-        }
+        todo!()
     }
     fn stop_sink_get_nodes(&self, id: usize) -> Vec<usize> {
-        let node = self.get_node(id);
-
-        match node {
-            Some(node) => {
-                if node.is_source() {
-                    return vec![id];
-                }
-                let mut predecessors_to_stop = Vec::new();
-                for predecessor in node.get_predecessors() {
-                    for next_predecessor in self.stop_sink(predecessor.get_destination_id()) {
-                        if !predecessors_to_stop.contains(&next_predecessor) {
-                            predecessors_to_stop.push(next_predecessor);
-                        }
-                    }
-                }
-                predecessors_to_stop
-            }
-            None => Vec::new()
-        }
+        todo!()
     }
 
     pub fn stop_source(&self, id: usize) {
-        for node in self.stop_source_get_nodes(id) {
-            self.adjacency_list[node].requested_state = Arc::new(PipelineNodeState::Stop); // fix later
-        }
+        todo!()
     }
 
     fn stop_source_get_nodes(&self, id: usize) -> Vec<usize> {
-        let mut nodes_to_stop = Vec::new();
-        for sink in self.stop_source_get_depending_sinks(id) {
-            for node in self.stop_sink_get_nodes(sink) {
-                if !nodes_to_stop.contains(&node) {
-                    nodes_to_stop.push(node);
-                }
-            }
-        }
-
-        nodes_to_stop
+        todo!()
     }
 
     fn stop_source_get_depending_sinks(&self, id: usize) -> Vec<usize> {
-        let node = self.get_node(id);
-
-        match node {
-            Some(node) => {
-                if node.is_sink() {
-                    return vec![id];
-                }
-                let mut successors_to_stop = Vec::new();
-                for successor in node.get_successors() {
-                    for next_successor in self.stop_source_get_depending_sinks(successor.get_destination_id()) {
-                        if !successors_to_stop.contains(&next_successor) {
-                            successors_to_stop.push(next_successor);
-                        }
-                    }
-                }
-                successors_to_stop
-            }
-            None => Vec::new()
-        }
+        todo!()
     }
 
     fn detect_improperly_handled_loops(&self) -> bool {
@@ -257,11 +163,7 @@ impl PipelineGraph {
         todo!()
     }
 
-    pub fn start_all(&self) {
-        
-    }
-    
-    pub fn stop_all(&self) {
-        
-    }
+    pub fn start_all(&self) {}
+
+    pub fn stop_all(&self) {}
 }

@@ -1,43 +1,47 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use futures::SinkExt;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode};
-use crate::pipeline::construction_layer::node_types::pipeline_node::NodeStatus;
+use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use futures::SinkExt;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
-pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize>
-{
+#[derive(Debug)]
+pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<Vec<I>>,
     output: [WrappedSender<I>; NO],
-    node_status: NodeStatus,
 }
-
 
 impl<I: Sharable, const NO: usize> PipelineSeriesDeconstructor<I, NO> {
     pub fn new(input: WrappedReceiver<Vec<I>>, output: [WrappedSender<I>; NO]) -> Self {
-        PipelineSeriesDeconstructor {
-            input,
-            output,
-            node_status: NodeStatus::new(),
-        }
+        PipelineSeriesDeconstructor { input, output }
     }
 }
 
-
 #[async_trait::async_trait]
 impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstructor<I, NO> {
-    async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
+    fn get_num_inputs(&self) -> usize {
+        1
+    }
+    fn get_num_outputs(&self) -> usize {
+        NO
+    }
+    async fn run_senders(&mut self, id: usize) -> Vec<usize> {
         let received = self.input.recv().unwrap();
         for item in received {
             for sender in self.output.iter_mut() {
                 sender.send(item.clone()).await;
-                *increment_size += 1; // this is wrong. Must increment on each channel separately. Fix later
             }
         }
-        
-        Vec::new()
+
+        let mut satiated_edges: Vec<usize> = Vec::new();
+        for sender in self.output.iter_mut() {
+            if sender.channel_satiated() {
+                satiated_edges.push(*sender.get_dest_id());
+            }
+        }
+
+        satiated_edges
     }
     fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
         for sender in self.output.iter() {
@@ -54,7 +58,6 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstruct
         false
     }
 }
-
 
 #[cfg(test)]
 mod tests {

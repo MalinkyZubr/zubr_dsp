@@ -1,17 +1,18 @@
-use std::marker::ConstParamTy;
-use std::cell::RefCell;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode;
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::atomic::AtomicUsize;
 use crate::pipeline::construction_layer::node_types::deconstruct::PipelineSeriesDeconstructor;
 use crate::pipeline::construction_layer::node_types::interleaving::PipelineInterleavedSeparator;
-use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode, IOCollectibleNode};
+use crate::pipeline::construction_layer::node_types::node_traits::{
+    CollectibleNode,
+};
+use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode;
+use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeriesReconstructor;
-
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::marker::ConstParamTy;
+use std::rc::Rc;
+use std::sync::atomic::AtomicUsize;
 
 #[derive(Clone)]
 pub struct PipelineParameters {
@@ -42,9 +43,8 @@ impl PipelineParameters {
     }
 }
 
-
 pub struct PipelineBuildVector {
-    nodes: Vec<(PipelineNodeType, HashMap<usize, usize>)>,
+    nodes: Vec<(usize, String, Box<dyn CollectibleNode>)>,
     parameters: PipelineParameters,
 }
 impl PipelineBuildVector {
@@ -54,12 +54,12 @@ impl PipelineBuildVector {
             parameters: pipeline_parameters,
         }
     }
-    pub fn add_node(&mut self, node: (PipelineNodeType, HashMap<usize, usize>)) {
+    pub fn add_node(&mut self, node: (usize, String, Box<dyn CollectibleNode>)) {
         self.nodes.push(node);
-        self.nodes.sort_by(|a, b| a.0.get_id().cmp(&b.0.get_id()))
+        self.nodes.sort_by(|a, b| a.1.cmp(&b.1))
     }
 
-    pub fn consume(self) -> Vec<(PipelineNodeType, HashMap<usize, usize>)> {
+    pub fn consume(self) -> Vec<(usize, String, Box<dyn CollectibleNode>)> {
         self.nodes
     }
 
@@ -68,12 +68,9 @@ impl PipelineBuildVector {
     }
 }
 
-
 static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-#[derive(ConstParamTy)]
+#[derive(Clone, PartialEq, Eq, Debug, ConstParamTy)]
 pub enum IntoWhat {
     CPU_NODE,
     IO_NODE,
@@ -81,7 +78,6 @@ pub enum IntoWhat {
     DECONSTRUCTOR_NODE,
     RECONSTRUCTOR_NODE,
 }
-
 
 pub struct BuildingNode<
     I: Sharable,
@@ -99,13 +95,8 @@ pub struct BuildingNode<
     demanded_input_count: usize,
     initial_state: Option<O>,
 }
-impl<
-        I: Sharable,
-        O: Sharable,
-        const NI: usize,
-        const NO: usize,
-        const Variant: IntoWhat,
-    > BuildingNode<I, O, NI, NO, Variant>
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const Variant: IntoWhat>
+    BuildingNode<I, O, NI, NO, Variant>
 {
     pub fn new(name: String) -> Self {
         Self {
@@ -150,83 +141,87 @@ impl<
         self.initial_state = Some(initial_state);
     }
 
-    fn into_node(mut self) -> (PipelineNode<I, O, NI, NO>, HashMap<usize, usize>) {
+    fn into_node(mut self) -> PipelineNode<I, O, NI, NO> {
         if self.step.is_none() {
             panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
         }
         let step = self.step.take().unwrap();
 
-        let new_node: PipelineNode<I, O, NI, NO> = PipelineNode::new(
-            step,
-            self.inputs,
-            self.outputs,
-            self.initial_state,
-        );
+        let new_node: PipelineNode<I, O, NI, NO> =
+            PipelineNode::new(step, self.inputs, self.outputs, self.initial_state);
 
-        (new_node, self.successors)
+        new_node
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO, {IntoWhat::IO_NODE}> {
-    pub fn build_io_node(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
+    BuildingNode<I, O, NI, NO, { IntoWhat::IO_NODE }>
+{
+    pub fn build_io_node(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
-        let (new_node, successors) = self.into_node();
-        (PipelineNodeType::IO(id, Box::new(new_node)), successors)
+        let name = self.name.clone();
+        let new_node = self.into_node();
+        (id, name, Box::new(new_node))
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO, {IntoWhat::CPU_NODE}> {
-    pub fn build_cpu_node(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
+    BuildingNode<I, O, NI, NO, { IntoWhat::CPU_NODE }>
+{
+    pub fn build_cpu_node(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
-        let (new_node, successors) = self.into_node();
-        (PipelineNodeType::CPU(id, Box::new(new_node)), successors)
+        let name = self.name.clone();
+        let new_node = self.into_node();
+        (id, name, Box::new(new_node))
     }
 }
 
-
-impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, Vec<T>, 1, NO, {IntoWhat::INTERLEAVER_NODE}> {
-    fn into_interleaved_separator(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+impl<T: Sharable, const NO: usize>
+    BuildingNode<Vec<T>, Vec<T>, 1, NO, { IntoWhat::INTERLEAVER_NODE }>
+{
+    fn into_interleaved_separator(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
         }
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let interleaved_separator: PipelineInterleavedSeparator<T, NO> = PipelineInterleavedSeparator::new(
-            self.inputs.remove(0),
-            self.outputs.try_into().unwrap(),
-        );
+        let interleaved_separator: PipelineInterleavedSeparator<T, NO> =
+            PipelineInterleavedSeparator::new(
+                self.inputs.remove(0),
+                self.outputs.try_into().unwrap(),
+            );
 
-        (PipelineNodeType::CPU(self.id, Box::new(interleaved_separator)), self.successors)
+        (self.id, self.name, Box::new(interleaved_separator))
     }
-    
-    pub fn build_interleave(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+
+    pub fn build_interleave(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
         self.into_interleaved_separator()
     }
 }
-impl<
-    T: Sharable,
-    const NO: usize,
-> BuildingNode<Vec<T>, T, 1, NO, {IntoWhat::DECONSTRUCTOR_NODE}> {
-    fn into_series_deconstructor(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+impl<T: Sharable, const NO: usize>
+    BuildingNode<Vec<T>, T, 1, NO, { IntoWhat::DECONSTRUCTOR_NODE }>
+{
+    fn into_series_deconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
         }
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let deconstructor_separator: PipelineSeriesDeconstructor<T, NO> = PipelineSeriesDeconstructor::new(
-            self.inputs.remove(0),
-            self.outputs.try_into().unwrap(),
-        );
+        let deconstructor_separator: PipelineSeriesDeconstructor<T, NO> =
+            PipelineSeriesDeconstructor::new(
+                self.inputs.remove(0),
+                self.outputs.try_into().unwrap(),
+            );
 
-        (PipelineNodeType::NOOP(self.id, Box::new(deconstructor_separator)), self.successors)
+        (self.id, self.name, Box::new(deconstructor_separator))
     }
-    
-    pub fn build_deconstruct(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+
+    pub fn build_deconstruct(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -234,27 +229,27 @@ impl<
     }
 }
 
-impl<
-T: Sharable,
-    const NO: usize,
-> BuildingNode<T, Vec<T>, 1, NO, {IntoWhat::RECONSTRUCTOR_NODE}> {
-    fn into_series_reconstructor(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+impl<T: Sharable, const NO: usize>
+    BuildingNode<T, Vec<T>, 1, NO, { IntoWhat::RECONSTRUCTOR_NODE }>
+{
+    fn into_series_reconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
         }
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let reconstructor_separator: PipelineSeriesReconstructor<T, NO> = PipelineSeriesReconstructor::new(
-            self.inputs.remove(0),
-            self.outputs.try_into().unwrap(),
-            self.demanded_input_count
-        );
+        let reconstructor_separator: PipelineSeriesReconstructor<T, NO> =
+            PipelineSeriesReconstructor::new(
+                self.inputs.remove(0),
+                self.outputs.try_into().unwrap(),
+                self.demanded_input_count,
+            );
 
-        (PipelineNodeType::NOOP(self.id, Box::new(reconstructor_separator)), self.successors)
+        (self.id, self.name, Box::new(reconstructor_separator))
     }
-    
-    pub fn build_reconstruct(mut self) -> (PipelineNodeType, HashMap<usize, usize>) {
+
+    pub fn build_reconstruct(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -262,21 +257,6 @@ T: Sharable,
     }
 }
 
-
-pub enum PipelineNodeType {
-    CPU(usize, Box<dyn CPUCollectibleNode>),
-    IO(usize, Box<dyn IOCollectibleNode>),
-    NOOP(usize, Box<dyn CollectibleNode>)
-}
-impl PipelineNodeType {
-    pub fn get_id(&self) -> usize {
-        match self {
-            PipelineNodeType::CPU(id, val) => *id,
-            PipelineNodeType::IO(id, val) => *id,
-            PipelineNodeType::NOOP(id, val) => *id
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -290,7 +270,10 @@ mod tests {
             vec![]
         }
 
-        fn clone_output_stop_flag(&self, _id: usize) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+        fn clone_output_stop_flag(
+            &self,
+            _id: usize,
+        ) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
             None
         }
 
@@ -306,9 +289,18 @@ mod tests {
         let params = PipelineParameters::new(1, 2, 3, 4, 5, 6);
         let mut bv = PipelineBuildVector::new(params);
 
-        bv.add_node((PipelineNodeType::NOOP(2, Box::new(DummyThread)), HashMap::new()));
-        bv.add_node((PipelineNodeType::NOOP(0, Box::new(DummyThread)), HashMap::new()));
-        bv.add_node((PipelineNodeType::NOOP(1, Box::new(DummyThread)), HashMap::new()));
+        bv.add_node((
+            PipelineNodeType::NOOP(2, Box::new(DummyThread)),
+            HashMap::new(),
+        ));
+        bv.add_node((
+            PipelineNodeType::NOOP(0, Box::new(DummyThread)),
+            HashMap::new(),
+        ));
+        bv.add_node((
+            PipelineNodeType::NOOP(1, Box::new(DummyThread)),
+            HashMap::new(),
+        ));
 
         let nodes = bv.consume();
         let ids: Vec<usize> = nodes.into_iter().map(|(t, _)| t.get_id()).collect();
@@ -317,7 +309,8 @@ mod tests {
 
     #[test]
     fn building_cpu_node_without_step_panics() {
-        let node: BuildingNode<i32, i32, 1, 1, { IntoWhat::CPU_NODE }> = BuildingNode::new("n".to_string());
+        let node: BuildingNode<i32, i32, 1, 1, { IntoWhat::CPU_NODE }> =
+            BuildingNode::new("n".to_string());
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = node.build_cpu_node();

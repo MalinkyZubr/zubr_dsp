@@ -1,40 +1,49 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use futures::SinkExt;
+use crate::pipeline::communication_layer::comms_core::{
+    iterative_send, WrappedReceiver, WrappedSender,
+};
+use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode};
-use crate::pipeline::construction_layer::node_types::pipeline_node::NodeStatus;
+use futures::SinkExt;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
-pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize>
-{
+#[derive(Debug)]
+pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<I>,
     output: [WrappedSender<Vec<I>>; NO],
-    node_status: NodeStatus,
-    receive_demands: usize
+    receive_demands: usize,
 }
 
-
 impl<I: Sharable, const NO: usize> PipelineSeriesReconstructor<I, NO> {
-    pub fn new(input: WrappedReceiver<I>, output: [WrappedSender<Vec<I>>; NO], receive_demands: usize) -> Self {
-        Self { input, output, node_status: NodeStatus::new(), receive_demands }
+    pub fn new(
+        input: WrappedReceiver<I>,
+        output: [WrappedSender<Vec<I>>; NO],
+        receive_demands: usize,
+    ) -> Self {
+        Self {
+            input,
+            output,
+            receive_demands,
+        }
     }
 }
 
-
 #[async_trait::async_trait]
 impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstructor<I, NO> {
-    async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
+    fn get_num_inputs(&self) -> usize {
+        1
+    }
+    fn get_num_outputs(&self) -> usize {
+        NO
+    }
+    async fn run_senders(&mut self, id: usize) -> Vec<usize> {
+        let mut satiated_edges: Vec<usize> = Vec::new();
         let input: Vec<I> = (0..self.receive_demands)
             .map(|_| self.input.recv().unwrap()) // error handling later
             .collect();
-        for sender in 0..self.output.len() - 1 {
-            self.output[sender].send(input.clone()).await;
-        }
-        self.output[self.output.len() - 1].send(input).await;
-        *increment_size += 1;
-        vec![]
+
+        iterative_send(&mut self.output, input).await.unwrap()
     }
     fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
         for sender in self.output.iter() {
@@ -51,7 +60,6 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
         false
     }
 }
-
 
 #[cfg(test)]
 mod tests {

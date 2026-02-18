@@ -50,6 +50,10 @@ impl ThreadPoolTopographical {
     pub fn get_run_flag(&self) -> Arc<AtomicBool> {
         self.run_flag.clone()
     }
+    
+    pub fn is_running(&self) -> bool {
+        self.run_flag.load(std::sync::atomic::Ordering::Acquire)
+    }
 
     pub fn task_submit(node_id: usize, thread_pool: Arc<Self>, task_type: TaskType) {
         let adjacency_node = thread_pool.graph.get_node(node_id).unwrap();
@@ -110,8 +114,7 @@ impl ThreadPoolTopographical {
     pub fn thread_compute_task(thread_pool: Arc<Self>, node_id: usize) {
         // need run flag check here
         if !thread_pool
-            .run_flag
-            .load(std::sync::atomic::Ordering::Acquire)
+            .is_running()
         {
             return;
         }

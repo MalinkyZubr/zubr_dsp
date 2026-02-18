@@ -1,44 +1,55 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use futures::SinkExt;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode};
-use crate::pipeline::construction_layer::node_types::pipeline_node::NodeStatus;
+use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use futures::SinkExt;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
-pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize>
-{
+#[derive(Debug)]
+pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<Vec<I>>,
     output: [WrappedSender<Vec<I>>; NUM_CHANNELS],
-    node_status: NodeStatus,
     buffered_data: Option<[Vec<I>; NUM_CHANNELS]>,
 }
 
-
 impl<I: Sharable, const NUM_CHANNELS: usize> PipelineInterleavedSeparator<I, NUM_CHANNELS> {
-    pub fn new(input: WrappedReceiver<Vec<I>>, output: [WrappedSender<Vec<I>>; NUM_CHANNELS]) -> PipelineInterleavedSeparator<I, NUM_CHANNELS> {
+    pub fn new(
+        input: WrappedReceiver<Vec<I>>,
+        output: [WrappedSender<Vec<I>>; NUM_CHANNELS],
+    ) -> PipelineInterleavedSeparator<I, NUM_CHANNELS> {
         PipelineInterleavedSeparator {
             input,
             output,
-            node_status: NodeStatus::new(),
             buffered_data: None,
         }
     }
 }
 
-
 #[async_trait::async_trait]
-impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode for PipelineInterleavedSeparator<I, NUM_CHANNELS> {
-    async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
+impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
+    for PipelineInterleavedSeparator<I, NUM_CHANNELS>
+{
+    fn get_num_inputs(&self) -> usize {
+        1
+    }
+    fn get_num_outputs(&self) -> usize {
+        NUM_CHANNELS
+    }
+    async fn run_senders(&mut self, id: usize) -> Vec<usize> {
         match self.buffered_data.take() {
             Some(data) => {
+                let mut satiated_edges: Vec<usize> = Vec::new();
                 for (index, val) in data.into_iter().enumerate() {
-                    self.output[index].send(val).await; // error handling later
+                    let sender = &mut self.output[index];
+                    sender.send(val).await; // error handling later
+                    if sender.channel_satiated() {
+                        satiated_edges.push(*sender.get_dest_id());
+                    }
                 }
-                vec![]
+                satiated_edges
             }
-            _ => vec![]
+            _ => vec![],
         }
     }
     fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
@@ -55,13 +66,12 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode for PipelineInterle
     fn has_initial_state(&self) -> bool {
         false
     }
-}
 
-impl<I: Sharable, const NUM_CHANNELS: usize> CPUCollectibleNode for PipelineInterleavedSeparator<I, NUM_CHANNELS> {
     fn call_thread_cpu(&mut self, id: usize) {
         let mut input: Vec<I> = self.input.recv().unwrap();
-        let mut output_values: [Vec<I>; NUM_CHANNELS] = vec![Vec::new(); NUM_CHANNELS].try_into().unwrap();
-        
+        let mut output_values: [Vec<I>; NUM_CHANNELS] =
+            vec![Vec::new(); NUM_CHANNELS].try_into().unwrap();
+
         let mut current_channel: usize = 0;
         for value in input {
             output_values[current_channel].push(value);
@@ -69,7 +79,6 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CPUCollectibleNode for PipelineInte
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

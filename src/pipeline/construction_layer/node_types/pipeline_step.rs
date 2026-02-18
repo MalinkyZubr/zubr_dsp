@@ -1,5 +1,6 @@
-use async_trait::async_trait;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use async_trait::async_trait;
+use std::fmt::Debug;
 
 // how can I make multiple input and output types more convenient?
 /*
@@ -8,11 +9,14 @@ use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 3. at the beginning of runtime, depending on the receiver type assigned to the node, a different handler (node method) is chosen to receive, so no additional match is needed
  */
 #[async_trait]
-pub trait PipelineStep<I: Sharable, O: Sharable, const NI: usize> : Send + 'static {
-    fn run_cpu(&mut self, input: [I; NI]) -> Result<O, ()> { panic!("run not implemented!") }
-    async fn run_io(&mut self, input: [I; NI]) -> Result<O, ()> { panic!("run not implemented!") }
+pub trait PipelineStep<I: Sharable, O: Sharable, const NI: usize>: Send + Debug + 'static {
+    fn run_cpu(&mut self, input: [I; NI]) -> Result<O, ()> {
+        panic!("run not implemented!")
+    }
+    async fn run_io(&mut self, input: [I; NI]) -> Result<O, ()> {
+        panic!("run not implemented!")
+    }
 }
-
 
 #[cfg(test)]
 mod tests {

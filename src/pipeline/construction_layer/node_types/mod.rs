@@ -3,4 +3,4 @@ pub mod pipeline_step;
 pub mod interleaving;
 pub mod deconstruct;
 pub mod reconstruct;
-mod node_traits;
+pub(crate) mod node_traits;
