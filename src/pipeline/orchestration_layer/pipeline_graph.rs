@@ -1,41 +1,10 @@
 use std::collections::HashMap;
-use crate::pipeline::construction_layer::pipeline_node::CollectibleThread;
 use atomic_enum::atomic_enum;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use itertools::Itertools;
-use crate::pipeline::construction_layer::builders::{BuildingNode, PipelineBuildVector};
-
-pub struct PipelineAdjacencyEdge {
-    source_id: usize,
-    destination_id: usize,
-    num_executions_since_completion: AtomicU64,
-    num_executions_to_complete: u64,
-    is_stopped: Arc<AtomicBool>,
-}
-impl PipelineAdjacencyEdge {
-    pub fn get_source_id(&self) -> usize {
-        self.source_id
-    }
-
-    pub fn get_destination_id(&self) -> usize {
-        self.destination_id
-    }
-
-    pub fn responsibility_fulfilled(&self) -> bool {
-        self.num_executions_since_completion.load(Ordering::Acquire) >= self.num_executions_to_complete
-    }
-
-    pub fn increment_num_sends(&self, amount: u64) {
-        self.num_executions_since_completion.fetch_add(amount, Ordering::Release);
-    }
-
-    pub fn decrement_num_sends(&self, amount: u64) {
-        self.num_executions_since_completion
-            .fetch_sub(amount, Ordering::Release);
-    }
-}
-
+use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::node_builder::{PipelineBuildVector, PipelineNodeType};
 
 #[atomic_enum]
 #[derive(PartialEq)]
@@ -47,9 +16,7 @@ pub enum PipelineNodeState {
 
 
 pub struct PipelineAdjacencyNode {
-    predecessors: Vec<Arc<PipelineAdjacencyEdge>>,
-    successors: Vec<Arc<PipelineAdjacencyEdge>>,
-    thread_object: Mutex<dyn CollectibleThread>,
+    thread_object: Mutex<PipelineNodeType>,
     current_state: Arc<PipelineNodeState>,
     requested_state: Arc<PipelineNodeState>,
     currently_running: AtomicBool,
@@ -57,10 +24,8 @@ pub struct PipelineAdjacencyNode {
     node_name: String,
 }
 impl PipelineAdjacencyNode {
-    pub fn new(thread_object: Mutex<Box<dyn CollectibleThread>>, id: usize, node_name: String) -> Self {
+    pub fn new(thread_object: Mutex<Box<dyn CollectibleNode>>, id: usize, node_name: String) -> Self {
         Self {
-            predecessors: Vec::new(),
-            successors: Vec::new(),
             thread_object,
             node_id: id,
             node_name,
@@ -93,7 +58,7 @@ impl PipelineAdjacencyNode {
         &self.successors
     }
 
-    pub fn get_thread_object(&self) -> &Mutex<dyn CollectibleThread> {
+    pub fn get_thread_object(&self) -> &Mutex<dyn CollectibleNode> {
         &self.thread_object
     }
 

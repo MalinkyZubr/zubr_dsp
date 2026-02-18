@@ -1,11 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::Instant;
 use futures::SinkExt;
-use log::Level;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::pipeline_node::{CPUCollectibleThread, CollectibleThread, NodeStatus};
+use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode};
+use crate::pipeline::construction_layer::node_types::pipeline_node::NodeStatus;
 
 pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize>
 {
@@ -25,7 +24,7 @@ impl<I: Sharable, const NO: usize> PipelineSeriesReconstructor<I, NO> {
 
 
 #[async_trait::async_trait]
-impl<I: Sharable, const NO: usize> CollectibleThread for PipelineSeriesReconstructor<I, NO> {
+impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstructor<I, NO> {
     async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
         let input: Vec<I> = (0..self.receive_demands)
             .map(|_| self.input.recv().unwrap()) // error handling later

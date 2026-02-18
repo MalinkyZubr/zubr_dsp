@@ -2,13 +2,14 @@ use std::marker::ConstParamTy;
 use std::cell::RefCell;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::pipeline_node::{CPUCollectibleThread, CollectibleThread, IOCollectibleThread, PipelineNode};
+use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode;
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use crate::pipeline::construction_layer::node_types::deconstruct::PipelineSeriesDeconstructor;
 use crate::pipeline::construction_layer::node_types::interleaving::PipelineInterleavedSeparator;
+use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode, IOCollectibleNode};
 use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeriesReconstructor;
 
 
@@ -263,9 +264,9 @@ T: Sharable,
 
 
 pub enum PipelineNodeType {
-    CPU(usize, Box<dyn CPUCollectibleThread>),
-    IO(usize, Box<dyn IOCollectibleThread>),
-    NOOP(usize, Box<dyn CollectibleThread>)
+    CPU(usize, Box<dyn CPUCollectibleNode>),
+    IO(usize, Box<dyn IOCollectibleNode>),
+    NOOP(usize, Box<dyn CollectibleNode>)
 }
 impl PipelineNodeType {
     pub fn get_id(&self) -> usize {
@@ -284,7 +285,7 @@ mod tests {
     struct DummyThread;
 
     #[async_trait::async_trait]
-    impl CollectibleThread for DummyThread {
+    impl CollectibleNode for DummyThread {
         async fn run_senders(&mut self, _id: usize, _increment_size: &mut usize) -> Vec<usize> {
             vec![]
         }

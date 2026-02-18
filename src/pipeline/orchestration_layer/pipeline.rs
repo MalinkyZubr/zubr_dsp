@@ -18,8 +18,6 @@ use crate::pipeline::construction_layer::pipeline_node::CollectibleThread;
 
 
 pub struct ActivePipeline {
-    thread_pool: PipelineThreadOrchestrator,
-    parameters: PipelineParameters,
     start_time: Instant,
 }
 impl ActivePipeline {

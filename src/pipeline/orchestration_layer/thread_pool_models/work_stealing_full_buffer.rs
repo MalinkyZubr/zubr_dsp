@@ -11,10 +11,7 @@ pub trait ThreadTaskTopographical {
     fn execute(&mut self) -> (Vec<Arc<dyn ThreadTaskTopographical>>, bool);
 }
 
-enum TaskType {
-    Senders,
-    Compute,
-}
+
 pub struct ThreadPoolTopographical {
     thread_pool: Arc<RayonPool>,
     async_runtime: Arc<TokioRuntime>,

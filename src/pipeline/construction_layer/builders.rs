@@ -4,11 +4,6 @@ use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep
 use crate::pipeline::construction_layer::pipeline_traits::{HasID, Sharable, Sink, Source, Unit};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeriesReconstructor;
-use crate::pipeline::construction_layer::node_types::deconstruct::PipelineSeriesDeconstructor;
-use std::sync::atomic::AtomicUsize;
-
-
 pub struct NodeBuilder<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const Variant: IntoWhat> {
     node_predecessor: BuildingNode<I, O, NI, NO, Variant>,
     build_vector: Rc<RefCell<PipelineBuildVector>>,
@@ -81,15 +76,15 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const Variant: 
     ) -> BuildingNode<O, (), 1, 0, NVariant>
     {
         // End a linear pipeline branch, allowing the step itself to handle output to other parts of the program
+        let mut new_node = BuildingNode::new(name);
         let (mut sender, mut receiver) = channel_wrapped::<O>(
             self.build_vector
                 .borrow_mut()
                 .get_parameters()
                 .backpressure_val,
+            self.node_predecessor.get_id(),
+            new_node.get_id(),
         );
-        let mut new_node = BuildingNode::new(name);
-        sender.set_dest_id(new_node.get_id());
-        receiver.set_source_id(self.node_predecessor.get_id());
         new_node.attach_step(Box::new(step));
 
         self.node_predecessor.add_output(sender);
@@ -281,7 +276,8 @@ impl<T: Sharable, const NO: usize> NodeBuilder<Vec<T>, T, 1, NO, { IntoWhat::DEC
 mod tests {
     use super::*;
     use crate::pipeline::communication_layer::comms_core::channel_wrapped;
-    use crate::pipeline::construction_layer::node_types::pipeline_node::{CPUCollectibleThread, CollectibleThread, IOCollectibleThread, PipelineNode};
+    use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode};
+    use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode;
 
     struct AddOneStep;
 

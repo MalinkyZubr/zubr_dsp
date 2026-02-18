@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::comms_core::{iterative_send, WrappedReceiver, WrappedSender};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::fmt::Debug;
-use std::future::Future;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use async_trait::async_trait;
-use log::Level;
-use crate::pipeline::construction_layer::node_types::pipeline_step::{PipelineStep};
+use crate::pipeline::construction_layer::node_types::node_traits::{CPUCollectibleNode, CollectibleNode, IOCollectibleNode};
+use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 
 #[derive(Debug, Clone)]
 pub struct NodeStatus {
@@ -71,39 +69,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
 
 
 #[async_trait]
-pub trait CollectibleThread {
-    async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize>; // runs a join set and waits for all tasks in that set to finish
-    fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>>;
-    fn load_initial_state(&mut self);
-    fn has_initial_state(&self) -> bool;
-}
-
-
-pub trait CPUCollectibleThread: Send + CollectibleThread {
-    fn call_thread_cpu(&mut self, id: usize);
-}
-
-
-#[async_trait]
-pub trait IOCollectibleThread: Send + CollectibleThread {
-    async fn call_thread_io(&mut self, id: usize);
-}
-
-
-#[async_trait]
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleThread for PipelineNode<I, O, NI, NO> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode for PipelineNode<I, O, NI, NO> {
     async fn run_senders(&mut self, id: usize, increment_size: &mut usize) -> Vec<usize> {
         match self.buffered_data.take() {
             Some(output_data) => {
-                for sender in 0..self.output.len() - 1 {
-                    self.output[sender].send(output_data.clone()).await;
-                }
-                self.output[self.output.len() - 1].send(output_data).await; // add error handling later
-                *increment_size += 1;
-                vec![0] // I forgot what this does so this is just a placeholder
+                iterative_send(&mut self.output, output_data).await.unwrap() // error handling later
             },
             None => {
-                //log_message(format!("No data to send on node {}", id), Level::Error);
                 Vec::new()
             }
         }
@@ -127,59 +99,36 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleThre
     }
 }
 
-
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CPUCollectibleThread for PipelineNode<I, O, NI, NO> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CPUCollectibleNode for PipelineNode<I, O, NI, NO> {
     fn call_thread_cpu(&mut self, id: usize) {
-        //log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
 
         let received_data: [I; NI] = self.receive_input(id);
-        //if received_data.is_some() {
         let compute_result = self.execute_pipeline_step(received_data);
 
         match compute_result {
             Ok(value) => self.buffered_data = Some(value),
-            Err(_) => ()//log_message(format!("Error in computation on node {}", id), Level::Error),
+            Err(_) => ()
         }
         self.node_status
             .update_analytics(start_time.elapsed().as_nanos() as u64);
-        //} else {
-            //self.buffered_data = None;
-            //log_message(format!("No data received on node {}", id), Level::Error);
-        //}
-        // log_message(
-        //     format!("ThreadID: {} state machine end of action loop", id), // find a way to propogate identifiers downwards for logs
-        //     Level::Trace,
-        // );
     }
 }
 
-
 #[async_trait]
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> IOCollectibleThread for PipelineNode<I, O, NI, NO> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> IOCollectibleNode for PipelineNode<I, O, NI, NO> {
     async fn call_thread_io(&mut self, id: usize) {
-        //log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
 
         let received_data: [I; NI] = self.receive_input(id);
-        //if received_data.is_some() {
         let compute_result = self.execute_pipeline_step_io(received_data).await;
 
         match compute_result {
             Ok(value) => self.buffered_data = Some(value),
-            Err(_) => ()//log_message(format!("Error in computation on node {}", id), Level::Error),
+            Err(_) => ()
         }
 
         self.node_status
             .update_analytics(start_time.elapsed().as_nanos() as u64);
-        //} else {
-        //self.buffered_data = None;
-        //log_message(format!("No data received on node {}", id), Level::Error);
-        //}
-        // log_message(
-        //     format!("ThreadID: {} state machine end of action loop", id), // find a way to propogate identifiers downwards for logs
-        //     Level::Trace,
-        // );
     }
 }
-
