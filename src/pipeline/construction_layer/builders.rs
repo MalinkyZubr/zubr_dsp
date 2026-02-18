@@ -277,86 +277,77 @@ impl<T: Sharable, const NO: usize> NodeBuilder<Vec<T>, T, 1, NO, { IntoWhat::DEC
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::communication_layer::comms_core::channel_wrapped;
+    use crate::pipeline::construction_layer::node_types::pipeline_node::{CPUCollectibleThread, CollectibleThread, IOCollectibleThread, PipelineNode};
 
-// pub trait PipelineRecipe<I: Sharable, O: Sharable> {
-//     // allow to save and standardize macro-scale components that you dont wan tto repeatedly redefine
-//     fn construct<FI: Sharable, FO: Sharable>(
-//         origin_node: PipelineNode<FI, I>,
-//         construction_queue: ConstructionQueue,
-//     ) -> PipelineNode<O, FO>;
-// }
+    struct AddOneStep;
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-//
-//     struct Intermediary {}
-//     impl PipelineStep<u32, u32> for Intermediary {
-//         fn run(&mut self, input: u32) -> Result<ODFormat<u32>, ()> {
-//             Ok(ODFormat::Standard(input + 1))
-//         }
-//     }
-//
-//     struct SourceD {}
-//     impl PipelineStep<(), u32> for SourceD {
-//         fn run(&mut self) -> Result<ODFormat<u32>, ()> {
-//             Ok(ODFormat::Standard(1))
-//         }
-//     }
-//     impl Source for SourceD {}
-//
-//     struct SinkD {}
-//     impl PipelineStep<u32, ()> for SinkD {
-//         fn run(&mut self, input: u32) -> Result<ODFormat<()>, ()> {
-//             Ok(ODFormat::Standard(()))
-//         }
-//     }
-//     impl Sink for SinkD {}
-//
-//     #[test]
-//     fn test_basic_source_sink() {
-//         let mut build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
-//             PipelineParameters::new(1, 1, 128, 1, 1, 1),
-//         )));
-//
-//         NodeBuilder::add_pipeline_source(
-//             String::from("TestSource"),
-//             SourceD {},
-//             build_vector.clone(),
-//         ).add_pipeline_sink(String::from("TestSink"), SinkD {});
-//
-//         let build_vector = build_vector.into_inner();
-//         let vector_internal = build_vector.consume();
-//         assert_eq!(vector_internal.len(), 2);
-//
-//         // Check internal values for the two nodes (source then sink)
-//         let source_node: &BuildingNode<(), u32> = unsafe {
-//             &*(((vector_internal[0].as_ref() as *const dyn CollectibleThreadPrecursor) as *const ())
-//                 as *const BuildingNode<(), u32>)
-//         };
-//         let sink_node: &BuildingNode<u32, ()> = unsafe {
-//             &*(((vector_internal[1].as_ref() as *const dyn CollectibleThreadPrecursor) as *const ())
-//                 as *const BuildingNode<u32, ()>)
-//         };
-//
-//         assert_eq!(source_node.name, "TestSource");
-//         assert!(source_node.step.is_some());
-//         assert_eq!(source_node.inputs.len(), 0);
-//         assert_eq!(source_node.outputs.len(), 1);
-//         assert_eq!(source_node.input_count, 1);
-//         assert!(source_node.successors.is_empty());
-//         assert!(source_node.initial_state.is_none());
-//
-//         assert_eq!(sink_node.name, "TestSink");
-//         assert!(sink_node.step.is_some());
-//         assert_eq!(sink_node.inputs.len(), 1);
-//         assert_eq!(sink_node.outputs.len(), 0);
-//         assert_eq!(sink_node.input_count, 1);
-//         assert!(sink_node.successors.is_empty());
-//         assert!(sink_node.initial_state.is_none());
-//
-//         assert_eq!(*source_node.outputs[0].get_dest_id(), sink_node.id);
-//         assert_eq!(sink_node.inputs[0].get_source_id(), source_node.id);
-//     }
-// }
+    #[async_trait::async_trait]
+    impl PipelineStep<i32, i32, 1> for AddOneStep {
+        fn run_cpu(&mut self, input: [i32; 1]) -> Result<i32, ()> {
+            Ok(input[0] + 1)
+        }
+    }
+
+    #[test]
+    fn pipeline_node_cpu_call_then_run_senders_sends_to_all_outputs() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let (mut in_tx, in_rx) = channel_wrapped::<i32>(8);
+
+        let (out_tx0, mut out_rx0) = channel_wrapped::<i32>(8);
+        let (out_tx1, mut out_rx1) = channel_wrapped::<i32>(8);
+
+        let step: Box<dyn PipelineStep<i32, i32, 1>> = Box::new(AddOneStep);
+
+        let mut node: PipelineNode<i32, i32, 1, 2> = PipelineNode::new(
+            step,
+            vec![in_rx],
+            vec![out_tx0, out_tx1],
+            None,
+        );
+
+        rt.block_on(async {
+            in_tx.send(41).await.unwrap();
+        });
+
+        // IMPORTANT: this uses blocking_recv internally, so it must NOT run on a Tokio runtime thread.
+        node.call_thread_cpu(0);
+
+        let mut inc = 0usize;
+        rt.block_on(async {
+            node.run_senders(0, &mut inc).await;
+        });
+
+        assert_eq!(inc, 1);
+
+        // Also blocking_recv internally -> keep outside runtime context.
+        assert_eq!(out_rx0.recv().unwrap(), 42);
+        assert_eq!(out_rx1.recv().unwrap(), 42);
+    }
+
+    #[test]
+    fn pipeline_node_initial_state_is_reported_and_loadable() {
+        let (_in_tx, in_rx) = channel_wrapped::<i32>(8);
+        let (out_tx, _out_rx) = channel_wrapped::<i32>(8);
+
+        let step: Box<dyn PipelineStep<i32, i32, 1>> = Box::new(AddOneStep);
+
+        let mut node: PipelineNode<i32, i32, 1, 1> = PipelineNode::new(
+            step,
+            vec![in_rx],
+            vec![out_tx],
+            Some(123),
+        );
+
+        assert!(node.has_initial_state());
+
+        // `new()` already primes `buffered_data` with the initial state, but `load_initial_state`
+        // should also be safe to call and restore it.
+        node.load_initial_state();
+    }
+}
+

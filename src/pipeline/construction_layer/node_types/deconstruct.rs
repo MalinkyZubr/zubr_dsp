@@ -55,3 +55,39 @@ impl<I: Sharable, const NO: usize> CollectibleThread for PipelineSeriesDeconstru
         false
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::communication_layer::comms_core::channel_wrapped;
+
+    #[test]
+    fn series_deconstructor_sends_each_item_to_each_output_and_increments() {
+        let (mut in_tx, in_rx) = channel_wrapped::<Vec<i32>>(8);
+
+        let (out_tx0, mut out_rx0) = channel_wrapped::<i32>(8);
+        let (out_tx1, mut out_rx1) = channel_wrapped::<i32>(8);
+
+        let mut node: PipelineSeriesDeconstructor<i32, 2> =
+            PipelineSeriesDeconstructor::new(in_rx, [out_tx0, out_tx1]);
+
+        futures::executor::block_on(async {
+            in_tx.send(vec![10, 20, 30]).await.unwrap();
+
+            let mut inc = 0usize;
+            node.run_senders(0, &mut inc).await;
+
+            // Current behavior: increments once per (item, channel) send.
+            assert_eq!(inc, 3 * 2);
+        });
+
+        assert_eq!(out_rx0.recv().unwrap(), 10);
+        assert_eq!(out_rx0.recv().unwrap(), 20);
+        assert_eq!(out_rx0.recv().unwrap(), 30);
+
+        assert_eq!(out_rx1.recv().unwrap(), 10);
+        assert_eq!(out_rx1.recv().unwrap(), 20);
+        assert_eq!(out_rx1.recv().unwrap(), 30);
+    }
+}

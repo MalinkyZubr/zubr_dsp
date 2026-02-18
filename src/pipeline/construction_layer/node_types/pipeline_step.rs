@@ -12,3 +12,28 @@ pub trait PipelineStep<I: Sharable, O: Sharable, const NI: usize> : Send + 'stat
     fn run_cpu(&mut self, input: [I; NI]) -> Result<O, ()> { panic!("run not implemented!") }
     async fn run_io(&mut self, input: [I; NI]) -> Result<O, ()> { panic!("run not implemented!") }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug)]
+    struct S;
+
+    // Intentionally does not override `run_cpu` / `run_io`.
+    struct DefaultPanicsStep;
+
+    #[async_trait::async_trait]
+    impl PipelineStep<S, S, 1> for DefaultPanicsStep {}
+
+    #[test]
+    fn default_run_cpu_panics() {
+        let result = std::panic::catch_unwind(|| {
+            let mut step = DefaultPanicsStep;
+            let _ = step.run_cpu([S]);
+        });
+
+        assert!(result.is_err());
+    }
+}

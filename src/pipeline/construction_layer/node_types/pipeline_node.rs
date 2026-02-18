@@ -80,13 +80,13 @@ pub trait CollectibleThread {
 
 
 pub trait CPUCollectibleThread: Send + CollectibleThread {
-    fn call_thread(&mut self, id: usize);
+    fn call_thread_cpu(&mut self, id: usize);
 }
 
 
 #[async_trait]
 pub trait IOCollectibleThread: Send + CollectibleThread {
-    async fn call_thread(&mut self, id: usize);
+    async fn call_thread_io(&mut self, id: usize);
 }
 
 
@@ -129,7 +129,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleThre
 
 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CPUCollectibleThread for PipelineNode<I, O, NI, NO> {
-    fn call_thread(&mut self, id: usize) {
+    fn call_thread_cpu(&mut self, id: usize) {
         //log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
 
@@ -141,7 +141,6 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CPUCollectibleT
             Ok(value) => self.buffered_data = Some(value),
             Err(_) => ()//log_message(format!("Error in computation on node {}", id), Level::Error),
         }
-
         self.node_status
             .update_analytics(start_time.elapsed().as_nanos() as u64);
         //} else {
@@ -158,7 +157,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CPUCollectibleT
 
 #[async_trait]
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> IOCollectibleThread for PipelineNode<I, O, NI, NO> {
-    async fn call_thread(&mut self, id: usize) {
+    async fn call_thread_io(&mut self, id: usize) {
         //log_message(format!("ThreadID: {} is called", id, ), Level::Trace);
         let start_time = Instant::now();
 

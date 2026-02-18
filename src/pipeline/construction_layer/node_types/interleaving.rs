@@ -59,7 +59,7 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleThread for PipelineInter
 }
 
 impl<I: Sharable, const NUM_CHANNELS: usize> CPUCollectibleThread for PipelineInterleavedSeparator<I, NUM_CHANNELS> {
-    fn call_thread(&mut self, id: usize) {
+    fn call_thread_cpu(&mut self, id: usize) {
         let mut input: Vec<I> = self.input.recv().unwrap();
         let mut output_values: [Vec<I>; NUM_CHANNELS] = vec![Vec::new(); NUM_CHANNELS].try_into().unwrap();
         
@@ -68,5 +68,30 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CPUCollectibleThread for PipelineIn
             output_values[current_channel].push(value);
             current_channel = (current_channel + 1) % NUM_CHANNELS;
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::communication_layer::comms_core::channel_wrapped;
+
+    #[test]
+    fn clone_output_stop_flag_returns_flag_for_matching_dest_id() {
+        let (_in_tx, in_rx) = channel_wrapped::<Vec<i32>>(8);
+
+        let (mut out_tx0, _out_rx0) = channel_wrapped::<Vec<i32>>(8);
+        let (mut out_tx1, _out_rx1) = channel_wrapped::<Vec<i32>>(8);
+
+        out_tx0.set_dest_id(111);
+        out_tx1.set_dest_id(222);
+
+        let node: PipelineInterleavedSeparator<i32, 2> =
+            PipelineInterleavedSeparator::new(in_rx, [out_tx0, out_tx1]);
+
+        assert!(node.clone_output_stop_flag(111).is_some());
+        assert!(node.clone_output_stop_flag(222).is_some());
+        assert!(node.clone_output_stop_flag(999).is_none());
     }
 }

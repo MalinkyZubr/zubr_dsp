@@ -276,3 +276,88 @@ impl PipelineNodeType {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DummyThread;
+
+    #[async_trait::async_trait]
+    impl CollectibleThread for DummyThread {
+        async fn run_senders(&mut self, _id: usize, _increment_size: &mut usize) -> Vec<usize> {
+            vec![]
+        }
+
+        fn clone_output_stop_flag(&self, _id: usize) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+            None
+        }
+
+        fn load_initial_state(&mut self) {}
+
+        fn has_initial_state(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn pipeline_build_vector_sorts_nodes_by_id_on_insert() {
+        let params = PipelineParameters::new(1, 2, 3, 4, 5, 6);
+        let mut bv = PipelineBuildVector::new(params);
+
+        bv.add_node((PipelineNodeType::NOOP(2, Box::new(DummyThread)), HashMap::new()));
+        bv.add_node((PipelineNodeType::NOOP(0, Box::new(DummyThread)), HashMap::new()));
+        bv.add_node((PipelineNodeType::NOOP(1, Box::new(DummyThread)), HashMap::new()));
+
+        let nodes = bv.consume();
+        let ids: Vec<usize> = nodes.into_iter().map(|(t, _)| t.get_id()).collect();
+        assert_eq!(ids, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn building_cpu_node_without_step_panics() {
+        let node: BuildingNode<i32, i32, 1, 1, { IntoWhat::CPU_NODE }> = BuildingNode::new("n".to_string());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = node.build_cpu_node();
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn interleaver_build_panics_if_incorrect_number_of_inputs() {
+        let node: BuildingNode<Vec<i32>, Vec<i32>, 1, 2, { IntoWhat::INTERLEAVER_NODE }> =
+            BuildingNode::new("inter".to_string());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = node.build_interleave();
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn deconstructor_build_panics_if_incorrect_number_of_inputs() {
+        let node: BuildingNode<Vec<i32>, i32, 1, 2, { IntoWhat::DECONSTRUCTOR_NODE }> =
+            BuildingNode::new("decon".to_string());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = node.build_deconstruct();
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reconstructor_build_panics_if_incorrect_number_of_inputs() {
+        let node: BuildingNode<i32, Vec<i32>, 1, 2, { IntoWhat::RECONSTRUCTOR_NODE }> =
+            BuildingNode::new("recon".to_string());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = node.build_reconstruct();
+        }));
+
+        assert!(result.is_err());
+    }
+}
