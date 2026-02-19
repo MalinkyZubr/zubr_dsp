@@ -4,34 +4,36 @@ use crossbeam::utils::CachePadded;
 use itertools::Itertools;
 use scc::HashMap as SCCHashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize};
 use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+
 
 #[atomic_enum]
 #[derive(PartialEq)]
 pub enum PipelineNodeState {
     Run,
     Stop,
-    Error,
+    Dependent
 }
 
 #[derive(Debug, Clone)]
 pub struct NodeMasterReadData {
-    num_executions: usize,
-    last_execution_time_ns: u64,
-    current_state: PipelineNodeState,
+    num_executions: Arc<AtomicUsize>,
+    last_execution_time_ns: Arc<AtomicU64>,
+    current_state: Arc<PipelineNodeState>,
 }
 impl NodeMasterReadData {
     pub fn new() -> NodeMasterReadData {
         NodeMasterReadData {
-            num_executions: 0,
-            last_execution_time_ns: 0,
+            num_executions: Arc::new(AtomicUsize::new(0)),
+            last_execution_time_ns: Arc::new(AtomicU64::new(0)),
             current_state: PipelineNodeState::Stop,
         }
     }
 
-    pub fn update_analytics(&mut self, execution_time_ns: u64) {
-        self.num_executions += 1;
-        self.last_execution_time_ns = execution_time_ns;
+    pub fn update_analytics(&self, execution_time_ns: u64) {
+        self.num_executions.fetch_add(1, std::sync::atomic::Ordering::Release);
+        self.last_execution_time_ns.store(execution_time_ns, std::sync::atomic::Ordering::Release);
     }
 }
 
@@ -67,7 +69,7 @@ impl NodeImmutableData {
 }
 
 pub struct PipelineGraph {
-    state_request_array: Arc<[PipelineNodeState]>, // array to hold the requested state for each node. Can be modified by either neighbor nodes or the master thread
+    state_request_map: SCCHashMap<usize, PipelineNodeState>, // map to hold the requested state for each node. Can be modified by either neighbor nodes or the master thread
     master_read_array: Arc<[CachePadded<NodeMasterReadData>]>, // holds data mutable to the compute threads. The master (main thread) should read analytics and metadata from here
     node_immutable_data: Arc<[NodeImmutableData]>, // holds data that can be read by all but is immutable.
     mutable_state_map: SCCHashMap<usize, Box<dyn CollectibleNode>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
@@ -75,19 +77,30 @@ pub struct PipelineGraph {
 impl PipelineGraph {
     pub fn new(build_vector: PipelineBuildVector) -> Self {
         let nodes = build_vector.consume();
-        let state_request_vec = vec![PipelineNodeState::Stop; nodes.len()];
         let mut master_read_vec = vec![CachePadded::new(NodeMasterReadData::new()); nodes.len()];
         let mut node_immutable_data =
             vec![NodeImmutableData::new(String::from(""), false, false, false); nodes.len()];
         let mutable_state_map = SCCHashMap::with_capacity(nodes.len());
+        let state_request_map = SCCHashMap::new();
 
         for (id, name, node) in nodes {
             node_immutable_data[id] = NodeImmutableData::new(name, node.get_num_inputs() == 0, node.get_num_outputs() == 0, node.has_initial_state());
             *master_read_vec[id] = NodeMasterReadData::new();
-            mutable_state_map.insert_sync(id, node);
+            
+            if node.is_source() || node.is_sink() {
+                match state_request_map.insert_sync(id, PipelineNodeState::Stop) {
+                    Ok(_) => {}
+                    Err(_) => panic!("Node {} already exists in the graph", id),
+                }
+            }
+            
+            match mutable_state_map.insert_sync(id, node) {
+                Ok(_) => {}
+                Err(_) => panic!("Node {} already exists in the graph", id),
+            }
         }
         Self {
-            state_request_array: Arc::from(state_request_vec),
+            state_request_map,
             master_read_array: Arc::from(master_read_vec),
             node_immutable_data: Arc::from(node_immutable_data),
             mutable_state_map,
@@ -139,31 +152,32 @@ impl PipelineGraph {
     pub fn stop_sink(&self, id: usize) {
         todo!()
     }
-    fn stop_sink_get_nodes(&self, id: usize) -> Vec<usize> {
-        todo!()
+
+    pub async fn stop_source(&self, id: usize) -> bool {
+        self.state_request_map.update_async(&id, |_, v| { *v = PipelineNodeState::Stop; *v }).await.is_some()
+    }
+    
+    pub async fn start_source(&self, id: usize) -> bool {
+        self.state_request_map.update_async(&id, |_, v| { *v = PipelineNodeState::Run; *v }).await.is_some()
+    }
+    
+    pub fn update_analytics(&self, id: usize, execution_time_ns: u64) {
+        self.master_read_array[id].update_analytics(execution_time_ns);
     }
 
-    pub fn stop_source(&self, id: usize) {
-        todo!()
+    pub fn start_all(&self) {
+        
     }
 
-    fn stop_source_get_nodes(&self, id: usize) -> Vec<usize> {
-        todo!()
+    pub fn stop_all(&self) {
+        
     }
-
-    fn stop_source_get_depending_sinks(&self, id: usize) -> Vec<usize> {
-        todo!()
+    
+    pub fn get_node(&self, id: usize) -> Option<(usize, Box<dyn CollectibleNode>)> {
+        self.mutable_state_map.remove_if_sync(&id, |_| true)
     }
-
-    fn detect_improperly_handled_loops(&self) -> bool {
-        todo!()
+    
+    pub fn place_node(&self, id: usize, node: Box<dyn CollectibleNode>) -> Option<()> {
+        self.mutable_state_map.insert_sync(id, node).ok()
     }
-
-    pub fn get_all_predecessors(&self, node_id: usize) -> Vec<usize> {
-        todo!()
-    }
-
-    pub fn start_all(&self) {}
-
-    pub fn stop_all(&self) {}
 }

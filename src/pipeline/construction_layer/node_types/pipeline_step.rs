@@ -9,7 +9,7 @@ use std::fmt::Debug;
 3. at the beginning of runtime, depending on the receiver type assigned to the node, a different handler (node method) is chosen to receive, so no additional match is needed
  */
 #[async_trait]
-pub trait PipelineStep<I: Sharable, O: Sharable, const NI: usize>: Send + Debug + 'static {
+pub trait PipelineStep<I: Sharable, O: Sharable, const NI: usize>: Send + Sync + Debug + 'static {
     fn run_cpu(&mut self, input: [I; NI]) -> Result<O, ()> {
         panic!("run not implemented!")
     }

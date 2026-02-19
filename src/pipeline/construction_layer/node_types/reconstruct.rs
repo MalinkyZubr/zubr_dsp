@@ -1,9 +1,9 @@
+use futures::future;
 use crate::pipeline::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
-use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use futures::SinkExt;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -31,6 +31,15 @@ impl<I: Sharable, const NO: usize> PipelineSeriesReconstructor<I, NO> {
 
 #[async_trait::async_trait]
 impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstructor<I, NO> {
+    fn is_ready_exec(&self) -> bool {
+        self.input.channel_satiated()
+    }
+    fn get_successors(&self) -> Vec<usize> {
+        self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
+    fn get_run_model(&self) -> RunModel {
+        RunModel::Communicator
+    }
     fn get_num_inputs(&self) -> usize {
         1
     }
@@ -38,20 +47,12 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
         NO
     }
     async fn run_senders(&mut self, id: usize) -> Vec<usize> {
-        let mut satiated_edges: Vec<usize> = Vec::new();
-        let input: Vec<I> = (0..self.receive_demands)
-            .map(|_| self.input.recv().unwrap()) // error handling later
-            .collect();
-
-        iterative_send(&mut self.output, input).await.unwrap()
-    }
-    fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
-        for sender in self.output.iter() {
-            if *sender.get_dest_id() == id {
-                return Some(sender.clone_stop_flag());
-            }
+        let mut results = vec![];
+        for _ in 0..self.receive_demands {
+            results.push(self.input.recv_async().await.unwrap());
         }
-        None
+
+        iterative_send(&mut self.output, results).await.unwrap()
     }
     fn load_initial_state(&mut self) {
         panic!("Series reconstructor does not support initial state")

@@ -1,5 +1,5 @@
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use futures::SinkExt;
 use std::sync::atomic::AtomicBool;
@@ -20,6 +20,15 @@ impl<I: Sharable, const NO: usize> PipelineSeriesDeconstructor<I, NO> {
 
 #[async_trait::async_trait]
 impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstructor<I, NO> {
+    fn is_ready_exec(&self) -> bool {
+        self.input.channel_satiated()
+    }
+    fn get_successors(&self) -> Vec<usize> {
+        self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
+    fn get_run_model(&self) -> RunModel {
+        RunModel::Communicator
+    }
     fn get_num_inputs(&self) -> usize {
         1
     }
@@ -27,7 +36,7 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstruct
         NO
     }
     async fn run_senders(&mut self, id: usize) -> Vec<usize> {
-        let received = self.input.recv().unwrap();
+        let received = self.input.recv_async().await.unwrap();
         for item in received {
             for sender in self.output.iter_mut() {
                 sender.send(item.clone()).await;
@@ -42,14 +51,6 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstruct
         }
 
         satiated_edges
-    }
-    fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
-        for sender in self.output.iter() {
-            if *sender.get_dest_id() == id {
-                return Some(sender.clone_stop_flag());
-            }
-        }
-        None
     }
     fn load_initial_state(&mut self) {
         panic!("Series deconstructor should not have initial state")

@@ -1,14 +1,14 @@
 use crate::pipeline::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
-use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Instant;
+use futures::future::join_all;
 
 #[derive(Debug)]
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
@@ -18,6 +18,7 @@ pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usi
     step: Box<dyn PipelineStep<I, O, NI>>,
     initial_state: Option<O>,
     buffered_data: Option<O>,
+    run_model: RunModel,
 }
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I, O, NI, NO> {
     pub fn new(
@@ -25,9 +26,15 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
         input: Vec<WrappedReceiver<I>>,
         output: Vec<WrappedSender<O>>,
         initial_state: Option<O>,
+        run_model: RunModel,
     ) -> PipelineNode<I, O, NI, NO> {
         let input: [WrappedReceiver<I>; NI] = input.try_into().unwrap();
         let output: [WrappedSender<O>; NO] = output.try_into().unwrap();
+
+        match run_model.clone() {
+            RunModel::Communicator => panic!("A node cannot use the communicator compute model"),
+            _ => (),
+        };
 
         PipelineNode {
             input,
@@ -35,14 +42,22 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
             step,
             buffered_data: initial_state.clone(),
             initial_state,
+            run_model,
         }
     }
 
-    fn receive_input(&mut self, id: usize) -> [I; NI] {
+    fn receive_input(&mut self) -> [I; NI] {
         let input: [I; NI] = std::array::from_fn(|i| {
             self.input[i].recv().unwrap() // error handling later when get work
         });
         input
+    }
+
+    async fn receive_input_async(&mut self) -> [I; NI] {
+        let futures = self.input.iter_mut().map(|r: &mut WrappedReceiver<I>| r.recv_async());
+        let vec = join_all(futures).await.into_iter().flatten().collect::<Vec<I>>();
+
+        vec.try_into().ok().unwrap()
     }
 
     fn execute_pipeline_step(&mut self, input_data: [I; NI]) -> Result<O, ()> {
@@ -58,12 +73,10 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     for PipelineNode<I, O, NI, NO>
 {
-    fn get_num_inputs(&self) -> usize {
-        NI
+    fn is_ready_exec(&self) -> bool {
+        self.input.iter().all(|x| x.channel_satiated())
     }
-    fn get_num_outputs(&self) -> usize {
-        NO
-    }
+    
     async fn run_senders(&mut self, id: usize) -> Vec<usize> {
         match self.buffered_data.take() {
             Some(output_data) => {
@@ -72,29 +85,34 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
             None => Vec::new(),
         }
     }
-
-    fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
-        for sender in self.output.iter() {
-            if *sender.get_dest_id() == id {
-                return Some(sender.clone_stop_flag());
-            }
-        }
-        None
+    fn load_initial_state(&mut self) {
+        self.buffered_data = self.initial_state.clone()
     }
-
+    fn get_successors(&self) -> Vec<usize> {
+        self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
     fn has_initial_state(&self) -> bool {
         self.initial_state.is_some()
     }
 
-    fn load_initial_state(&mut self) {
-        self.buffered_data = self.initial_state.clone()
+    fn get_num_inputs(&self) -> usize {
+        NI
     }
 
-    async fn call_thread_io(&mut self, id: usize) {
-        let start_time = Instant::now();
+    fn get_num_outputs(&self) -> usize {
+        NO
+    }
 
-        let received_data: [I; NI] = self.receive_input(id);
-        let compute_result = self.execute_pipeline_step_io(received_data).await;
+    fn get_run_model(&self) -> RunModel {
+        match &self.buffered_data {
+            Some(_) => RunModel::Communicator,
+            None => self.run_model.clone(),
+        }
+    }
+
+    fn call_thread_cpu(&mut self, id: usize) {
+        let received_data: [I; NI] = self.receive_input();
+        let compute_result = self.execute_pipeline_step(received_data);
 
         match compute_result {
             Ok(value) => self.buffered_data = Some(value),
@@ -102,11 +120,9 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
         }
     }
 
-    fn call_thread_cpu(&mut self, id: usize) {
-        let start_time = Instant::now();
-
-        let received_data: [I; NI] = self.receive_input(id);
-        let compute_result = self.execute_pipeline_step(received_data);
+    async fn call_thread_io(&mut self, id: usize) {
+        let received_data: [I; NI] = self.receive_input_async().await;
+        let compute_result = self.execute_pipeline_step_io(received_data).await;
 
         match compute_result {
             Ok(value) => self.buffered_data = Some(value),

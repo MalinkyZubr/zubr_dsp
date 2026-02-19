@@ -1,5 +1,5 @@
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
+use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use futures::SinkExt;
 use std::sync::atomic::AtomicBool;
@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize> {
-    // need to have a buuilder struct that wraps in identification info to make the graph after
+    // need to have a builder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<Vec<I>>,
     output: [WrappedSender<Vec<I>>; NUM_CHANNELS],
     buffered_data: Option<[Vec<I>; NUM_CHANNELS]>,
@@ -30,6 +30,18 @@ impl<I: Sharable, const NUM_CHANNELS: usize> PipelineInterleavedSeparator<I, NUM
 impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
     for PipelineInterleavedSeparator<I, NUM_CHANNELS>
 {
+    fn is_ready_exec(&self) -> bool {
+        self.input.channel_satiated()
+    }
+    fn get_successors(&self) -> Vec<usize> {
+        self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
+    fn get_run_model(&self) -> RunModel {
+        match &self.buffered_data {
+            Some(_) => RunModel::Communicator,
+            None => RunModel::CPU,
+        }
+    }
     fn get_num_inputs(&self) -> usize {
         1
     }
@@ -51,14 +63,6 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
             }
             _ => vec![],
         }
-    }
-    fn clone_output_stop_flag(&self, id: usize) -> Option<Arc<AtomicBool>> {
-        for sender in self.output.iter() {
-            if *sender.get_dest_id() == id {
-                return Some(sender.clone_stop_flag());
-            }
-        }
-        None
     }
     fn load_initial_state(&mut self) {
         panic!("Initial state not supported for interleaved separator");
