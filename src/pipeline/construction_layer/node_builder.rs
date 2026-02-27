@@ -6,40 +6,21 @@ use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeriesReconstructor;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::ConstParamTy;
-use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
+use log::info;
 
 #[derive(Clone)]
 pub struct PipelineParameters {
-    pub retries: usize,
-    pub timeout: u64,
-    pub max_infrastructure_errors: usize,
-    pub max_compute_errors: usize,
-    pub unchanged_state_time: u64,
-    pub backpressure_val: usize,
+    pub buff_size: usize,
 }
 impl PipelineParameters {
-    pub fn new(
-        retries: usize,
-        timeout: u64,
-        backpressure_val: usize,
-        max_infrastructure_errors: usize,
-        max_compute_errors: usize,
-        unchanged_state_time: u64,
-    ) -> PipelineParameters {
-        Self {
-            retries,
-            timeout,
-            backpressure_val,
-            max_compute_errors,
-            max_infrastructure_errors,
-            unchanged_state_time,
-        }
+    pub fn new(buff_size: usize) -> Self {
+        Self { buff_size: buff_size }
     }
 }
+
 
 pub struct PipelineBuildVector {
     nodes: Vec<(usize, String, Box<dyn CollectibleNode>)>,
@@ -53,6 +34,7 @@ impl PipelineBuildVector {
         }
     }
     pub fn add_node(&mut self, node: (usize, String, Box<dyn CollectibleNode>)) {
+        info!("Adding node {}", node.0);
         self.nodes.push(node);
         self.nodes.sort_by(|a, b| a.1.cmp(&b.1))
     }
@@ -207,7 +189,7 @@ impl<T: Sharable, const NO: usize>
         (self.id, self.name, Box::new(interleaved_separator))
     }
 
-    pub fn build_interleave(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_interleave(self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }

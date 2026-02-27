@@ -4,7 +4,15 @@
 #![feature(adt_const_params)]
 #![allow(dead_code)]
 
-mod pipeline;
+use log::Level;
+use crate::pipeline::orchestration_layer::logging::{init_default_logger, init_stdout_logger};
+
+pub mod pipeline;
+
+
+pub fn initiate_pipeline(log_level: Level) {
+    init_stdout_logger(log_level).expect("Failed to initialize logger");
+}
 
 // use pipeline::orchestration_layer::logging::initialize_logger;
 // 

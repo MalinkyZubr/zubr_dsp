@@ -2,10 +2,12 @@ use crate::pipeline::construction_layer::node_builder::PipelineBuildVector;
 use crate::pipeline::construction_layer::node_types::node_traits::CollectibleNode;
 use crossbeam::utils::CachePadded;
 use scc::HashMap as SCCHashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize};
 use std::sync::Arc;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum PipelineNodeState {
     Run,
     Stop,
@@ -91,8 +93,14 @@ pub struct PipelineGraph {
     mutable_state_map: SCCHashMap<usize, Box<dyn CollectibleNode>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
 }
 impl PipelineGraph {
-    pub fn new(build_vector: PipelineBuildVector) -> Self {
-        let nodes = build_vector.consume();
+    pub fn new(build_vector: Rc<RefCell<PipelineBuildVector>>) -> Self {
+        let nodes = match Rc::try_unwrap(build_vector) {
+            Ok(build_vector) => {
+                build_vector.into_inner().consume()
+            }
+            Err(_) => panic!("PipelineBuildVector is not cloneable"),
+        };
+
         let mut master_read_vec = vec![CachePadded::new(NodeMasterReadData::new()); nodes.len()];
         let mut node_immutable_data =
             vec![NodeImmutableData::new(String::from(""), false, false, false); nodes.len()];
@@ -186,7 +194,7 @@ impl PipelineGraph {
             ),
         )
     }
-    
+
     pub fn stop_sink(&self, id: usize) {
         todo!()
     }
@@ -225,5 +233,293 @@ impl PipelineGraph {
 
     pub fn place_node(&self, id: usize, node: Box<dyn CollectibleNode>) -> Option<()> {
         self.mutable_state_map.insert_sync(id, node).ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::construction_layer::node_builder::PipelineParameters;
+
+    // Mock CollectibleNode for testing
+    #[derive(Debug)]
+    struct MockNode {
+        id: usize,
+        num_inputs: usize,
+        num_outputs: usize,
+        has_initial: bool,
+    }
+
+    impl MockNode {
+        fn new(id: usize, num_inputs: usize, num_outputs: usize, has_initial: bool) -> Self {
+            Self {
+                id,
+                num_inputs,
+                num_outputs,
+                has_initial,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CollectibleNode for MockNode {
+        fn is_ready_exec(&self) -> bool {
+            true
+        }
+        fn get_successors(&self) -> Vec<usize> {
+            vec![]
+        }
+        fn get_run_model(
+            &self,
+        ) -> crate::pipeline::construction_layer::node_types::node_traits::RunModel {
+            crate::pipeline::construction_layer::node_types::node_traits::RunModel::CPU
+        }
+        fn get_num_inputs(&self) -> usize {
+            self.num_inputs
+        }
+        fn get_num_outputs(&self) -> usize {
+            self.num_outputs
+        }
+        async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
+            Some(vec![])
+        }
+        fn load_initial_state(&mut self) {}
+        fn has_initial_state(&self) -> bool {
+            self.has_initial
+        }
+    }
+
+    fn create_test_build_vector() -> PipelineBuildVector {
+        let params = PipelineParameters::new(16);
+        let mut build_vector = PipelineBuildVector::new(params);
+
+        // Add a source node (0 inputs, 2 outputs)
+        build_vector.add_node((
+            0,
+            "source".to_string(),
+            Box::new(MockNode::new(0, 0, 2, false)),
+        ));
+
+        // Add a processing node (2 inputs, 1 output, with initial state)
+        build_vector.add_node((
+            1,
+            "processor".to_string(),
+            Box::new(MockNode::new(1, 2, 1, true)),
+        ));
+
+        // Add a sink node (1 input, 0 outputs)
+        build_vector.add_node((
+            2,
+            "sink".to_string(),
+            Box::new(MockNode::new(2, 1, 0, false)),
+        ));
+
+        build_vector
+    }
+
+    #[test]
+    fn test_pipeline_node_state_conversions() {
+        assert_eq!(PipelineNodeState::Run.into_u8(), 0);
+        assert_eq!(PipelineNodeState::Stop.into_u8(), 1);
+        assert_eq!(PipelineNodeState::Dependent.into_u8(), 2);
+
+        assert_eq!(PipelineNodeState::from_u8(0), PipelineNodeState::Run);
+        assert_eq!(PipelineNodeState::from_u8(1), PipelineNodeState::Stop);
+        assert_eq!(PipelineNodeState::from_u8(2), PipelineNodeState::Dependent);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid state value: 3")]
+    fn test_pipeline_node_state_invalid_conversion() {
+        PipelineNodeState::from_u8(3);
+    }
+
+    #[test]
+    fn test_node_master_read_data_new() {
+        let data = NodeMasterReadData::new();
+
+        assert_eq!(
+            data.num_executions
+                .load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+        assert_eq!(
+            data.last_execution_time_ns
+                .load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+        assert_eq!(
+            PipelineNodeState::from_u8(
+                data.current_state
+                    .load(std::sync::atomic::Ordering::Acquire)
+            ),
+            PipelineNodeState::Stop
+        );
+    }
+
+    #[test]
+    fn test_node_master_read_data_update_analytics() {
+        let data = NodeMasterReadData::new();
+
+        data.update_analytics(1500);
+
+        assert_eq!(
+            data.num_executions
+                .load(std::sync::atomic::Ordering::Acquire),
+            1
+        );
+        assert_eq!(
+            data.last_execution_time_ns
+                .load(std::sync::atomic::Ordering::Acquire),
+            1500
+        );
+
+        data.update_analytics(2000);
+
+        assert_eq!(
+            data.num_executions
+                .load(std::sync::atomic::Ordering::Acquire),
+            2
+        );
+        assert_eq!(
+            data.last_execution_time_ns
+                .load(std::sync::atomic::Ordering::Acquire),
+            2000
+        );
+    }
+
+    #[test]
+    fn test_node_immutable_data_new() {
+        let data = NodeImmutableData::new("test_node".to_string(), true, false, true);
+
+        assert_eq!(data.name, "test_node");
+        assert!(data.is_source);
+        assert!(!data.is_sink);
+        assert!(data.initially_stateful);
+    }
+
+    #[test]
+    fn test_pipeline_graph_new() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        // Verify the graph was created successfully
+        assert_eq!(graph.get_node_name(0), "source");
+        assert_eq!(graph.get_node_name(1), "processor");
+        assert_eq!(graph.get_node_name(2), "sink");
+    }
+
+    #[test]
+    fn test_get_all_sources() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        let sources = graph.get_all_sources();
+        assert_eq!(sources.len(), 1);
+        assert!(sources.contains(&0));
+    }
+
+    #[test]
+    fn test_get_all_sinks() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        let sinks = graph.get_all_sinks();
+        assert_eq!(sinks.len(), 1);
+        assert!(sinks.contains(&2));
+    }
+
+    #[test]
+    fn test_get_all_initially_stateful() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        let stateful = graph.get_all_initially_stateful();
+        assert_eq!(stateful.len(), 1);
+        assert!(stateful.contains(&1));
+    }
+
+    #[test]
+    fn test_get_node_analytics() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        let (executions, time, state) = graph.get_node_analytics(0);
+        assert_eq!(executions, 0);
+        assert_eq!(time, 0);
+        assert_eq!(state, PipelineNodeState::Stop);
+    }
+
+    #[test]
+    fn test_update_analytics() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        graph.update_analytics(0, 1234);
+
+        let (executions, time, _) = graph.get_node_analytics(0);
+        assert_eq!(executions, 1);
+        assert_eq!(time, 1234);
+    }
+
+    #[tokio::test]
+    async fn test_start_stop_source() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        // Start source
+        let result = graph.start_source(0).await;
+        assert!(result);
+
+        // Stop source
+        let result = graph.stop_source(0).await;
+        assert!(result);
+
+        // Try to start/stop non-existent source
+        let result = graph.start_source(999).await;
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_get_and_place_node() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        // Get a node
+        let node_data = graph.get_node(1);
+        assert!(node_data.is_some());
+        let (id, node) = node_data.unwrap();
+        assert_eq!(id, 1);
+
+        // Try to get the same node again (should be None since it was removed)
+        let node_data2 = graph.get_node(1);
+        assert!(node_data2.is_none());
+
+        // Place the node back
+        let result = graph.place_node(1, node);
+        assert!(result.is_some());
+
+        // Now we should be able to get it again
+        let node_data3 = graph.get_node(1);
+        assert!(node_data3.is_some());
+    }
+
+    #[test]
+    fn test_get_nonexistent_node() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        let node_data = graph.get_node(999);
+        assert!(node_data.is_none());
+    }
+
+    #[test]
+    fn test_start_stop_all() {
+        let build_vector = create_test_build_vector();
+        let graph = PipelineGraph::new(Rc::new(RefCell::new(build_vector)));
+
+        // These methods should not panic
+        graph.start_all();
+        graph.stop_all();
     }
 }

@@ -1,11 +1,8 @@
 use async_trait::async_trait;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use tokio::sync::mpsc::error::SendError;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunModel {
     IO,
     CPU,

@@ -60,3 +60,112 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstruct
         RunModel::Communicator
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+    use tokio::sync::Notify;
+    
+
+    fn create_test_channels<T: Sharable>(buffer_size: usize) -> (WrappedSender<T>, WrappedReceiver<T>) {
+        let (tx, rx) = mpsc::channel(buffer_size);
+        let notify = Arc::new(Notify::new());
+        let capacity = Arc::new(AtomicUsize::new(1));
+        
+        (
+            WrappedSender::new(tx, 1, notify.clone(), capacity.clone()),
+            WrappedReceiver::new(rx, 0, notify, capacity)
+        )
+    }
+
+    #[test]
+    fn test_pipeline_series_deconstructor_new() {
+        let (_, input) = create_test_channels::<Vec<i32>>(10);
+        let (output1, _) = create_test_channels::<i32>(10);
+        let (output2, _) = create_test_channels::<i32>(10);
+        
+        let deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
+        
+        assert_eq!(deconstructor.get_num_inputs(), 1);
+        assert_eq!(deconstructor.get_num_outputs(), 2);
+        assert!(!deconstructor.has_initial_state());
+        assert_eq!(deconstructor.get_run_model(), RunModel::Communicator);
+    }
+
+    #[test]
+    fn test_get_successors() {
+        let (_, input) = create_test_channels::<Vec<i32>>(10);
+        let (output1, _) = create_test_channels(10);
+        let (output2, _) = create_test_channels(10);
+        
+        let deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
+        
+        let successors = deconstructor.get_successors();
+        assert_eq!(successors.len(), 2);
+        assert!(successors.contains(&1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Series deconstructor should not have initial state")]
+    fn test_load_initial_state_panics() {
+        let (_, input) = create_test_channels::<Vec<i32>>(10);
+        let (output1, _) = create_test_channels(10);
+        let (output2, _) = create_test_channels(10);
+        
+        let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
+        
+        deconstructor.load_initial_state();
+    }
+
+    #[tokio::test]
+    async fn test_run_senders() {
+        let (mut tx, input) = create_test_channels(10);
+        let (output1, mut rx1) = create_test_channels(10);
+        let (output2, mut rx2) = create_test_channels(10);
+        
+        let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
+
+        // Send test data
+        let test_vec = vec![1,2,3];
+        tx.send(test_vec).await.unwrap();
+
+        // Run the deconstructor
+        let result = deconstructor.run_senders(0).await;
+        assert!(result.is_some());
+
+        // Verify both outputs received all items
+        for expected_value in [1, 2, 3] {
+            let received1 = rx1.recv_async().await.unwrap();
+            let received2 = rx2.recv_async().await.unwrap();
+            
+            assert_eq!(received1, expected_value);
+            assert_eq!(received2, expected_value);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_senders_empty_vec() {
+        let (mut tx, input) = create_test_channels::<Vec<i32>>(10);
+        let (output1, mut rx1) = create_test_channels::<i32>(10);
+        let (output2, mut rx2) = create_test_channels::<i32>(10);
+        
+        let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
+
+        // Send empty vector
+        tx.send(vec![]).await.unwrap();
+
+        // Run the deconstructor
+        let result = deconstructor.run_senders(0).await;
+        assert!(result.is_some());
+
+        // Verify no data was sent to outputs
+        tokio::select! {
+            _ = rx1.recv_async() => panic!("Should not receive data"),
+            _ = rx2.recv_async() => panic!("Should not receive data"),
+            _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {}
+        }
+    }
+}

@@ -6,8 +6,6 @@ use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use futures::future::join_all;
 
 #[derive(Debug)]
@@ -73,10 +71,6 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     for PipelineNode<I, O, NI, NO>
 {
-    fn is_ready_exec(&self) -> bool {
-        self.input.iter().all(|x| x.channel_satiated())
-    }
-    
     async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> {
         match self.buffered_data.take() {
             Some(output_data) => {
@@ -85,22 +79,26 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
             _ => None,
         }
     }
+
     fn load_initial_state(&mut self) {
         self.buffered_data = self.initial_state.clone()
-    }
-    fn get_successors(&self) -> Vec<usize> {
-        self.output.iter().map(|x| *x.get_dest_id()).collect()
     }
     fn has_initial_state(&self) -> bool {
         self.initial_state.is_some()
     }
-
     fn get_num_inputs(&self) -> usize {
         NI
     }
-
     fn get_num_outputs(&self) -> usize {
         NO
+    }
+
+    fn is_ready_exec(&self) -> bool {
+        self.input.iter().all(|x| x.channel_satiated())
+    }
+
+    fn get_successors(&self) -> Vec<usize> {
+        self.output.iter().map(|x| *x.get_dest_id()).collect()
     }
 
     fn get_run_model(&self) -> RunModel {
