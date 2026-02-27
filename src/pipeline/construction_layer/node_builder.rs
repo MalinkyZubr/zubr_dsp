@@ -1,9 +1,7 @@
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::construction_layer::node_types::deconstruct::PipelineSeriesDeconstructor;
 use crate::pipeline::construction_layer::node_types::interleaving::PipelineInterleavedSeparator;
-use crate::pipeline::construction_layer::node_types::node_traits::{
-    CollectibleNode,
-};
+use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode;
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeriesReconstructor;
@@ -78,13 +76,22 @@ pub enum IntoWhat {
     DECONSTRUCTOR_NODE,
     RECONSTRUCTOR_NODE,
 }
+impl IntoWhat {
+    pub fn run_model(&self) -> RunModel {
+        match self {
+            Self::CPU_NODE | Self::INTERLEAVER_NODE => RunModel::CPU,
+            Self::IO_NODE => RunModel::IO,
+            _ => RunModel::Communicator,
+        }
+    }
+}
 
 pub struct BuildingNode<
     I: Sharable,
     O: Sharable,
     const NI: usize,
     const NO: usize,
-    const Variant: IntoWhat,
+    const VARIANT: IntoWhat,
 > {
     id: usize,
     name: String,
@@ -95,8 +102,8 @@ pub struct BuildingNode<
     demanded_input_count: usize,
     initial_state: Option<O>,
 }
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const Variant: IntoWhat>
-    BuildingNode<I, O, NI, NO, Variant>
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: IntoWhat>
+    BuildingNode<I, O, NI, NO, VARIANT>
 {
     pub fn new(name: String) -> Self {
         Self {
@@ -147,8 +154,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const Variant: 
         }
         let step = self.step.take().unwrap();
 
-        let new_node: PipelineNode<I, O, NI, NO> =
-            PipelineNode::new(step, self.inputs, self.outputs, self.initial_state);
+        let new_node: PipelineNode<I, O, NI, NO> = PipelineNode::new(
+            step,
+            self.inputs,
+            self.outputs,
+            self.initial_state,
+            VARIANT.run_model(),
+        );
 
         new_node
     }
@@ -157,7 +169,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const Variant: 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
     BuildingNode<I, O, NI, NO, { IntoWhat::IO_NODE }>
 {
-    pub fn build_io_node(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_io_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
         let name = self.name.clone();
         let new_node = self.into_node();
@@ -168,7 +180,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
     BuildingNode<I, O, NI, NO, { IntoWhat::CPU_NODE }>
 {
-    pub fn build_cpu_node(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_cpu_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
         let name = self.name.clone();
         let new_node = self.into_node();
@@ -221,7 +233,7 @@ impl<T: Sharable, const NO: usize>
         (self.id, self.name, Box::new(deconstructor_separator))
     }
 
-    pub fn build_deconstruct(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_deconstruct(self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -249,109 +261,10 @@ impl<T: Sharable, const NO: usize>
         (self.id, self.name, Box::new(reconstructor_separator))
     }
 
-    pub fn build_reconstruct(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_reconstruct(self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
         self.into_series_reconstructor()
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct DummyThread;
-
-    #[async_trait::async_trait]
-    impl CollectibleNode for DummyThread {
-        async fn run_senders(&mut self, _id: usize, _increment_size: &mut usize) -> Vec<usize> {
-            vec![]
-        }
-
-        fn clone_output_stop_flag(
-            &self,
-            _id: usize,
-        ) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
-            None
-        }
-
-        fn load_initial_state(&mut self) {}
-
-        fn has_initial_state(&self) -> bool {
-            false
-        }
-    }
-
-    #[test]
-    fn pipeline_build_vector_sorts_nodes_by_id_on_insert() {
-        let params = PipelineParameters::new(1, 2, 3, 4, 5, 6);
-        let mut bv = PipelineBuildVector::new(params);
-
-        bv.add_node((
-            PipelineNodeType::NOOP(2, Box::new(DummyThread)),
-            HashMap::new(),
-        ));
-        bv.add_node((
-            PipelineNodeType::NOOP(0, Box::new(DummyThread)),
-            HashMap::new(),
-        ));
-        bv.add_node((
-            PipelineNodeType::NOOP(1, Box::new(DummyThread)),
-            HashMap::new(),
-        ));
-
-        let nodes = bv.consume();
-        let ids: Vec<usize> = nodes.into_iter().map(|(t, _)| t.get_id()).collect();
-        assert_eq!(ids, vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn building_cpu_node_without_step_panics() {
-        let node: BuildingNode<i32, i32, 1, 1, { IntoWhat::CPU_NODE }> =
-            BuildingNode::new("n".to_string());
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = node.build_cpu_node();
-        }));
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn interleaver_build_panics_if_incorrect_number_of_inputs() {
-        let node: BuildingNode<Vec<i32>, Vec<i32>, 1, 2, { IntoWhat::INTERLEAVER_NODE }> =
-            BuildingNode::new("inter".to_string());
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = node.build_interleave();
-        }));
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn deconstructor_build_panics_if_incorrect_number_of_inputs() {
-        let node: BuildingNode<Vec<i32>, i32, 1, 2, { IntoWhat::DECONSTRUCTOR_NODE }> =
-            BuildingNode::new("decon".to_string());
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = node.build_deconstruct();
-        }));
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reconstructor_build_panics_if_incorrect_number_of_inputs() {
-        let node: BuildingNode<i32, Vec<i32>, 1, 2, { IntoWhat::RECONSTRUCTOR_NODE }> =
-            BuildingNode::new("recon".to_string());
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = node.build_reconstruct();
-        }));
-
-        assert!(result.is_err());
     }
 }

@@ -77,12 +77,12 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
         self.input.iter().all(|x| x.channel_satiated())
     }
     
-    async fn run_senders(&mut self, id: usize) -> Vec<usize> {
+    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> {
         match self.buffered_data.take() {
             Some(output_data) => {
-                iterative_send(&mut self.output, output_data).await.unwrap() // error handling later
+                iterative_send(&mut self.output, output_data).await.ok()
             }
-            None => Vec::new(),
+            _ => None,
         }
     }
     fn load_initial_state(&mut self) {

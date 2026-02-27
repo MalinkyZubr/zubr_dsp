@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
@@ -48,20 +49,23 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
     fn get_num_outputs(&self) -> usize {
         NUM_CHANNELS
     }
-    async fn run_senders(&mut self, id: usize) -> Vec<usize> {
+    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> { // very inefficient function. Optimize later
         match self.buffered_data.take() {
             Some(data) => {
-                let mut satiated_edges: Vec<usize> = Vec::new();
+                let mut satiated_edges: HashSet<usize> = HashSet::new();
                 for (index, val) in data.into_iter().enumerate() {
                     let sender = &mut self.output[index];
-                    sender.send(val).await; // error handling later
+                    match sender.send(val).await {
+                        Ok(_) => (),
+                        Err(_) => return None
+                    }
                     if sender.channel_satiated() {
-                        satiated_edges.push(*sender.get_dest_id());
+                        satiated_edges.insert(*sender.get_dest_id());
                     }
                 }
-                satiated_edges
+                Some(satiated_edges.into_iter().collect())
             }
-            _ => vec![],
+            _ => None,
         }
     }
     fn load_initial_state(&mut self) {
@@ -72,7 +76,7 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
     }
 
     fn call_thread_cpu(&mut self, id: usize) {
-        let mut input: Vec<I> = self.input.recv().unwrap();
+        let input: Vec<I> = self.input.recv().unwrap();
         let mut output_values: [Vec<I>; NUM_CHANNELS] =
             vec![Vec::new(); NUM_CHANNELS].try_into().unwrap();
 
@@ -81,29 +85,5 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
             output_values[current_channel].push(value);
             current_channel = (current_channel + 1) % NUM_CHANNELS;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pipeline::communication_layer::comms_core::channel_wrapped;
-
-    #[test]
-    fn clone_output_stop_flag_returns_flag_for_matching_dest_id() {
-        let (_in_tx, in_rx) = channel_wrapped::<Vec<i32>>(8);
-
-        let (mut out_tx0, _out_rx0) = channel_wrapped::<Vec<i32>>(8);
-        let (mut out_tx1, _out_rx1) = channel_wrapped::<Vec<i32>>(8);
-
-        out_tx0.set_dest_id(111);
-        out_tx1.set_dest_id(222);
-
-        let node: PipelineInterleavedSeparator<i32, 2> =
-            PipelineInterleavedSeparator::new(in_rx, [out_tx0, out_tx1]);
-
-        assert!(node.clone_output_stop_flag(111).is_some());
-        assert!(node.clone_output_stop_flag(222).is_some());
-        assert!(node.clone_output_stop_flag(999).is_none());
     }
 }

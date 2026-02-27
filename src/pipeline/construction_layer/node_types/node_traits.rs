@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-
+use tokio::sync::mpsc::error::SendError;
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
 #[derive(Debug, Clone, Copy)]
 pub enum RunModel {
@@ -10,9 +11,11 @@ pub enum RunModel {
     CPU,
     Communicator
 }
+
+
 #[async_trait]
 pub trait CollectibleNode: Send + Sync + 'static {
-    async fn run_senders(&mut self, id: usize) -> Vec<usize>; // this return value contains all the successors ready to run
+    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>>; // this return value contains all the successors ready to run
     fn load_initial_state(&mut self);
     fn has_initial_state(&self) -> bool;
     fn get_num_inputs(&self) -> usize;

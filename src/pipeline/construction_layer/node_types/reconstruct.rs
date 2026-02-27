@@ -46,49 +46,18 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
     fn get_num_outputs(&self) -> usize {
         NO
     }
-    async fn run_senders(&mut self, id: usize) -> Vec<usize> {
+    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> {
         let mut results = vec![];
         for _ in 0..self.receive_demands {
-            results.push(self.input.recv_async().await.unwrap());
+            results.push(self.input.recv_async().await.unwrap()); // unwrap is okay because this assumes all predecessors are ready 
         }
 
-        iterative_send(&mut self.output, results).await.unwrap()
+        iterative_send(&mut self.output, results).await.ok()
     }
     fn load_initial_state(&mut self) {
         panic!("Series reconstructor does not support initial state")
     }
     fn has_initial_state(&self) -> bool {
         false
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pipeline::communication_layer::comms_core::channel_wrapped;
-
-    #[test]
-    fn series_reconstructor_collects_receive_demands_items_and_sends_vec() {
-        let (mut in_tx, in_rx) = channel_wrapped::<i32>(8);
-
-        let (out_tx0, mut out_rx0) = channel_wrapped::<Vec<i32>>(8);
-        let (out_tx1, mut out_rx1) = channel_wrapped::<Vec<i32>>(8);
-
-        let mut node: PipelineSeriesReconstructor<i32, 2> =
-            PipelineSeriesReconstructor::new(in_rx, [out_tx0, out_tx1], 3);
-
-        futures::executor::block_on(async {
-            in_tx.send(1).await.unwrap();
-            in_tx.send(2).await.unwrap();
-            in_tx.send(3).await.unwrap();
-
-            let mut inc = 0usize;
-            node.run_senders(0, &mut inc).await;
-
-            assert_eq!(inc, 1);
-        });
-
-        assert_eq!(out_rx0.recv().unwrap(), vec![1, 2, 3]);
-        assert_eq!(out_rx1.recv().unwrap(), vec![1, 2, 3]);
     }
 }

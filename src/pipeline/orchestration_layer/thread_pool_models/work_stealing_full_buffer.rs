@@ -2,7 +2,6 @@
 
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
-use itertools::Itertools;
 use rayon::{ThreadPool as RayonPool, ThreadPoolBuilder as RayonBuilder};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -56,30 +55,30 @@ impl ThreadPoolTopographical {
     }
 
     fn task_execute(thread_pool: Arc<Self>, node_id: usize) {
-        let (id, mut node) = match thread_pool
-            .graph
-            .get_node(node_id) {
-                Some(node) => node,
-                None => return // if this is the case, the node must already be running. hence it cannot be executed
+        let (id, node) = match thread_pool.graph.get_node(node_id) {
+            Some(node) => node,
+            None => return, // if this is the case, the node must already be running. hence it cannot be executed
         };
         Self::task_execute_direct(thread_pool, id, node);
     }
     fn task_execute_direct(thread_pool: Arc<Self>, id: usize, node: Box<dyn CollectibleNode>) {
-        if !thread_pool.is_running()
-        {
-            thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
-                panic!("Node not found in graph (should never happen)")
-            });
-            return
+        if !thread_pool.is_running() {
+            thread_pool
+                .graph
+                .place_node(id, node)
+                .unwrap_or_else(|| panic!("Node not found in graph (should never happen)"));
+            return;
         }
-        
+
         let thread_pool_clone = thread_pool.clone();
         let run_model = node.get_run_model();
 
         match run_model {
             RunModel::CPU => {
                 if !node.is_ready_exec() {
-                    thread_pool.graph.place_node(id, node).unwrap_or_else(|| panic!("Node not found in graph (should be impossible)"));
+                    thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
+                        panic!("Node not found in graph (should be impossible)")
+                    });
                     return;
                 }
                 thread_pool.thread_pool.spawn(move || {
@@ -88,7 +87,9 @@ impl ThreadPoolTopographical {
             }
             RunModel::IO => {
                 if !node.is_ready_exec() {
-                    thread_pool.graph.place_node(id, node).unwrap_or_else(|| panic!("Node not found in graph (should be impossible)"));
+                    thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
+                        panic!("Node not found in graph (should be impossible)")
+                    });
                     return;
                 }
                 thread_pool.async_runtime.spawn(async move {
@@ -96,33 +97,46 @@ impl ThreadPoolTopographical {
                 });
             }
             RunModel::Communicator => {
-                thread_pool
-                    .async_runtime
-                    .spawn(async move { Self::async_sender_task(thread_pool_clone, id, node).await });
+                thread_pool.async_runtime.spawn(async move {
+                    Self::async_sender_task(thread_pool_clone, id, node).await
+                });
             }
         }
     }
 
-    async fn async_sender_task(thread_pool: Arc<Self>, id: usize, mut node: Box<dyn CollectibleNode>) {
+    async fn async_sender_task(
+        thread_pool: Arc<Self>,
+        id: usize,
+        mut node: Box<dyn CollectibleNode>,
+    ) {
         let satiated_channels = node.run_senders(id).await;
-        for successor_id in satiated_channels {
+        for successor_id in satiated_channels.unwrap() {
+            // unwrap is NOT safe here. Change later
             Self::task_execute(thread_pool.clone(), successor_id);
         }
 
-        Self::task_execute_direct(thread_pool, id, node); 
+        Self::task_execute_direct(thread_pool, id, node);
     }
 
-    async fn async_compute_task(thread_pool: Arc<Self>, id: usize, mut node: Box<dyn CollectibleNode>) {
+    async fn async_compute_task(
+        thread_pool: Arc<Self>,
+        id: usize,
+        mut node: Box<dyn CollectibleNode>,
+    ) {
         let start = std::time::Instant::now();
         node.call_thread_io(id).await;
-        thread_pool.graph.update_analytics(id, start.elapsed().as_nanos() as u64);
+        thread_pool
+            .graph
+            .update_analytics(id, start.elapsed().as_nanos() as u64);
         Self::task_execute(thread_pool, id);
     }
 
     fn thread_compute_task(thread_pool: Arc<Self>, id: usize, mut node: Box<dyn CollectibleNode>) {
         let start = std::time::Instant::now();
         node.call_thread_cpu(id);
-        thread_pool.graph.update_analytics(id, start.elapsed().as_nanos() as u64);
+        thread_pool
+            .graph
+            .update_analytics(id, start.elapsed().as_nanos() as u64);
         Self::task_execute(thread_pool, id);
     }
 }
@@ -156,15 +170,11 @@ impl ThreadPoolTopographicalHandle {
 
         let sources = self.graph.get_all_sources();
         for source in sources {
-            ThreadPoolTopographical::task_submit(
-                source,
-                self.master_pool.clone(),
-                TaskType::Compute,
-            );
+            ThreadPoolTopographical::task_execute(self.master_pool.clone(), source);
         }
         let initially_stateful = self.graph.get_all_initially_stateful();
         for node in initially_stateful {
-            ThreadPoolTopographical::task_submit(node, self.master_pool.clone(), TaskType::Senders)
+            ThreadPoolTopographical::task_execute(self.master_pool.clone(), node);
         }
     }
 }
