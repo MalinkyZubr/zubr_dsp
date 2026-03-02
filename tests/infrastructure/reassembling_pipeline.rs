@@ -1,20 +1,23 @@
 #[cfg(test)]
+#[serial_test::serial]
 mod tests {
-    use crate::infrastructure::test_models::{verify_input_output, TestAdder, TestLinearI32Mult, TestSinkI32, TestSinkI32Vec, TestSourceI32, TestSourceI32Vec};
+    use crate::infrastructure::test_models::{
+        verify_input_output, TestLinearI32Mult, TestSinkI32, TestSinkI32Vec,
+        TestSourceI32Vec,
+    };
     use log::{error, Level};
     use std::cell::RefCell;
     use std::rc::Rc;
-    use std::sync::{Arc, OnceLock};
-    use std::time::Duration;
-    use tokio::io::AsyncWriteExt;
+    use std::sync::Arc;
+
     use tokio::sync::mpsc::{channel, Receiver};
-    use ZubrDSP::initiate_pipeline;
-    use ZubrDSP::pipeline::construction_layer::builders::NodeBuilder;
-    use ZubrDSP::pipeline::construction_layer::node_builder::{
-        reset_node_id_counter, IntoWhat, PipelineBuildVector, PipelineParameters,
+    use zubr_dsp::initiate_pipeline;
+    use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
+    use zubr_dsp::pipeline::construction_layer::node_builder::{
+        IntoWhat, PipelineBuildVector, PipelineParameters,
     };
-    use ZubrDSP::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
-    use ZubrDSP::pipeline::orchestration_layer::thread_pool_models::work_stealing_full_buffer::{
+    use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
+    use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::work_stealing_full_buffer::{
         build_topographical_thread_pool, ThreadPoolTopographicalHandle,
     };
 
@@ -22,9 +25,9 @@ mod tests {
     fn generate_test_pipeline() -> (
         Arc<PipelineGraph>,
         ThreadPoolTopographicalHandle,
-        Receiver<i32>, Receiver<Vec<i32>>
+        Receiver<i32>,
+        Receiver<Vec<i32>>,
     ) {
-        reset_node_id_counter();
         initiate_pipeline(Level::Debug);
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
@@ -39,17 +42,20 @@ mod tests {
         let (out_send_1, out_recv_1) = channel(100);
         let (out_send_2, out_recv_2) = channel(100);
 
-        let deconstructor = source.attach_series_deconstructor::<2>("test deconstructor".to_string());
-        let mut deconstructor = deconstructor.add_cpu_pipeline_sink("test_sink_1".to_string(), TestSinkI32::new(out_send_1));
-        let mut step1 = deconstructor.attach_standard_cpu::<_, 1, 1>("test node 1".to_string(), TestLinearI32Mult::new());
-        let reconstructor = step1.attach_series_reconstructor::<1, 4>("test reconstructor".to_string())
+        let deconstructor =
+            source.attach_series_deconstructor::<2>("test deconstructor".to_string());
+        let mut deconstructor = deconstructor
+            .add_cpu_pipeline_sink("test_sink_1".to_string(), TestSinkI32::new(out_send_1));
+        let mut step1 = deconstructor
+            .attach_standard_cpu::<_, 1, 1>("test node 1".to_string(), TestLinearI32Mult::new());
+        let reconstructor = step1
+            .attach_series_reconstructor::<1, 4>("test reconstructor".to_string())
             .add_cpu_pipeline_sink("vec sink".to_string(), TestSinkI32Vec::new(out_send_2));
 
         deconstructor.submit_series_deconstructor();
         step1.submit_cpu();
         source.submit_cpu();
         reconstructor.submit_series_reconstructor();
-
 
         let graph = Arc::new(PipelineGraph::new(build_vector));
         let handle = build_topographical_thread_pool(4, 1, graph.clone());
@@ -58,11 +64,11 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_pipeline_cpu() {
+    fn test_reassembling_pipeline_cpu() {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
-            let (graph, mut handle, mut receiver1, mut receiver2) = generate_test_pipeline();
+            let (_graph, mut handle, mut receiver1, mut receiver2) = generate_test_pipeline();
             handle.start(&rt);
             error!("test_linear_pipeline start");
 

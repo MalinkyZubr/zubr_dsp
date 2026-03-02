@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn test_task_execute_stopped_pool() {
         // Test the basic stopped pool logic without runtime conflicts
-        let graph = create_test_graph();
+        let _graph = create_test_graph();
         let run_flag = Arc::new(AtomicBool::new(false)); // Start stopped
 
         // Verify the flag is set correctly

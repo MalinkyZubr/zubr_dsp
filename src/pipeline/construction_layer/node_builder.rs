@@ -9,7 +9,6 @@ use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use log::{debug, info};
 use std::collections::HashMap;
 use std::marker::ConstParamTy;
-use std::sync::atomic::AtomicUsize;
 
 #[derive(Clone)]
 pub struct PipelineParameters {
@@ -26,18 +25,26 @@ impl PipelineParameters {
 pub struct PipelineBuildVector {
     nodes: Vec<(usize, String, Box<dyn CollectibleNode>)>,
     parameters: PipelineParameters,
+    id_counter: usize,
 }
 impl PipelineBuildVector {
     pub fn new(pipeline_parameters: PipelineParameters) -> Self {
         PipelineBuildVector {
             nodes: Vec::new(),
             parameters: pipeline_parameters,
+            id_counter: 0,
         }
     }
     pub fn add_node(&mut self, node: (usize, String, Box<dyn CollectibleNode>)) {
         info!("Adding node {} {:?}", node.0, node.2.get_run_model());
         self.nodes.push(node);
         self.nodes.sort_by(|a, b| a.1.cmp(&b.1))
+    }
+    
+    pub fn get_new_id(&mut self) -> usize {
+        let out = self.id_counter;
+        self.id_counter += 1;
+        out
     }
 
     pub fn consume(self) -> Vec<(usize, String, Box<dyn CollectibleNode>)> {
@@ -49,10 +56,6 @@ impl PipelineBuildVector {
     }
 }
 
-static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
-pub fn reset_node_id_counter() {
-    NODE_ID_COUNTER.store(0, std::sync::atomic::Ordering::SeqCst);
-}
 
 #[derive(Clone, PartialEq, Eq, Debug, ConstParamTy)]
 pub enum IntoWhat {
@@ -91,9 +94,9 @@ pub struct BuildingNode<
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: IntoWhat>
     BuildingNode<I, O, NI, NO, VARIANT>
 {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, id: usize) -> Self {
         Self {
-            id: NODE_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            id,
             name,
             step: None,
             inputs: Vec::new(),

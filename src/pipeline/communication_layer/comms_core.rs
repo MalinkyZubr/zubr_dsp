@@ -286,13 +286,6 @@ mod tests {
         assert_eq!(received2, test_data);
     }
 
-    #[tokio::test]
-    async fn test_iterative_send_empty_array() {
-        let senders: [WrappedSender<i32>; 0] = [];
-        // This would not compile in practice, but demonstrates the constraint
-        // that we need at least one sender for the function to work properly
-    }
-
     #[test]
     fn test_atomic_operations() {
         let capacity = Arc::new(AtomicUsize::new(10));

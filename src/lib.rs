@@ -6,19 +6,16 @@
 
 use crate::pipeline::orchestration_layer::logging::init_stdout_logger;
 use log::Level;
-use std::sync::OnceLock;
+use std::sync::Once;
 
 pub mod pipeline;
 
-static INIT: OnceLock<()> = OnceLock::new();
+static INIT: Once = Once::new();
+
 pub fn initiate_pipeline(log_level: Level) {
-    match INIT.get() {
-        None => {
-            init_stdout_logger(log_level).expect("Failed to initialize logger");
-            let _ = INIT.set(());
-        }
-        _ => (),
-    }
+    INIT.call_once(|| {
+        if let Err(_) = init_stdout_logger(log_level) {}
+    });
 }
 
 // use pipeline::orchestration_layer::logging::initialize_logger;

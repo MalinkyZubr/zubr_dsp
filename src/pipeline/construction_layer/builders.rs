@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 
+
 pub struct NodeBuilder<
     I: Sharable,
     O: Sharable,
@@ -16,7 +17,7 @@ pub struct NodeBuilder<
     const VARIANT: IntoWhat,
 > {
     node_predecessor: BuildingNode<I, O, NI, NO, VARIANT>,
-    build_vector: Rc<RefCell<PipelineBuildVector>>,
+    build_vector: Rc<RefCell<PipelineBuildVector>>
 }
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: IntoWhat>
     NodeBuilder<I, O, NI, NO, VARIANT>
@@ -53,7 +54,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
     ) -> NodeBuilder<O, F, NIN, NON, N_VARIANT> {
         // attach a step to the selected node (self) and create a thread
         // produce a successor node to continue the pipeline
-        let mut new_node = BuildingNode::new(name);
+        let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         new_node.attach_step(Box::new(step));
 
         let (sender, receiver) = channel_wrapped::<O>(
@@ -101,7 +102,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         step: impl PipelineStep<O, (), 1> + 'static + Sink,
     ) -> BuildingNode<O, (), 1, 0, N_VARIANT> {
         // End a linear pipeline branch, allowing the step itself to handle output to other parts of the program
-        let mut new_node = BuildingNode::new(name);
+        let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
             self.node_predecessor.get_id(),
@@ -148,7 +149,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         I: Unit,
     {
         // start a pipeline, allowing the step itself to handle input from other parts of the program
-        let mut start_node = BuildingNode::new(name);
+        let mut start_node = BuildingNode::new(name, build_vector.borrow_mut().get_new_id());
         start_node.attach_step(Box::new(source_step));
 
         NodeBuilder {
@@ -174,7 +175,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         step: impl PipelineStep<I, O, NIN> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
     ) -> NodeBuilder<I, O, NIN, NON, N_VARIANT> {
-        let mut new_node = BuildingNode::new(name);
+        let mut new_node = BuildingNode::new(name, build_vector.borrow_mut().get_new_id());
         new_node.attach_step(Box::new(step));
 
         NodeBuilder {
@@ -222,7 +223,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         &mut self,
         name: String,
     ) -> NodeBuilder<O, Vec<O>, 1, NON, { IntoWhat::ReconstructorNode }> {
-        let mut new_node = BuildingNode::new(name);
+        let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
             self.node_predecessor.get_id(),
@@ -247,7 +248,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         &mut self,
         name: String,
     ) -> NodeBuilder<Vec<O>, Vec<O>, 1, NON, { IntoWhat::InterleaverNode }> {
-        let mut new_node = BuildingNode::new(name);
+        let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<Vec<O>>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
             self.node_predecessor.get_id(),
@@ -267,7 +268,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         &mut self,
         name: String,
     ) -> NodeBuilder<Vec<O>, O, 1, NON, { IntoWhat::DeconstructorNode }> {
-        let mut new_node = BuildingNode::new(name);
+        let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<Vec<O>>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
             self.node_predecessor.get_id(),

@@ -59,4 +59,5 @@ async-trait = "0.1.89"
 scc = "3.6.3"
 zubr_state_machine = "0.1.0"
 chrono = "0.4.41"
+serial_test = "3.4.0"
 
