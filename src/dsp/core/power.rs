@@ -1,6 +1,7 @@
 use num::Complex;
 use crate::dsp::sampling::sampling_formulas::index_from_frequeny;
-use crate::pipeline::api::{ODFormat, PipelineStep};
+use crate::pipeline::interfaces::PipelineStep;
+use crate::pipeline::interfaces::ODFormat;
 
 pub struct PowerCalculatorTD {}
 impl PipelineStep<Vec<f32>, f32> for PowerCalculatorTD {

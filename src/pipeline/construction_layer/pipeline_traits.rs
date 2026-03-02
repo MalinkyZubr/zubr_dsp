@@ -1,0 +1,24 @@
+use std::fmt::Debug;
+
+pub trait HasDefault {
+    fn default() -> Self;
+}
+
+pub trait Sharable = Send + Sync + Debug + Clone + 'static;
+
+pub trait Source {}
+pub trait Sink {}
+
+pub trait Unit: Send + Clone {
+    fn gen() -> Self;
+}
+impl Unit for () {
+    fn gen() -> Self {
+        ()
+    }
+}
+
+pub trait HasID {
+    fn get_id(&self) -> String;
+    fn set_id(&mut self, id: &str);
+}

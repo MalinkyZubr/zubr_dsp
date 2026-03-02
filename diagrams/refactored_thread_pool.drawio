@@ -1,0 +1,88 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.2.5 Chrome/138.0.7204.251 Electron/37.6.1 Safari/537.36" version="28.2.5">
+  <diagram name="Page-1" id="nsKuF7r1AUfED6OHO5Vg">
+    <mxGraphModel dx="1595" dy="848" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-2" value="Goal: I need a priority queue to place tasks into the thread pool in order. Since data flows from one node to the next, if one thread tries to run with unsatisfied dependencies too far back in the dependency graph, there is a high probability for it to lock. Hence a system needs to be put in place to minimize lockups, wihtout sacraficing the benefits of multithreading. Can this just be viewed as a breadth first traversal of a tree? Directed acyclic graph is more accurate. Loops are not a concern because from the point of view of the computation, it can be treated as a branch with an external data sink. How it handles series data is another question, however.&amp;nbsp;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="520" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-3" target="xm97tIzFpSOHS7XiSRMR-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-3" value="Source (1)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="460" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-4" target="xm97tIzFpSOHS7XiSRMR-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-4" target="xm97tIzFpSOHS7XiSRMR-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-4" value="Step 1 (2)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="460" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-5" target="xm97tIzFpSOHS7XiSRMR-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-5" value="Step 2 B (4)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="425" y="570" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-6" target="xm97tIzFpSOHS7XiSRMR-13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-6" value="Step 2 A (3)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="425" y="370" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-7" value="Loopback Node (7)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="690" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-8" target="xm97tIzFpSOHS7XiSRMR-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-8" target="xm97tIzFpSOHS7XiSRMR-16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-8" value="Step 3 B (6)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="570" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xm97tIzFpSOHS7XiSRMR-13" target="xm97tIzFpSOHS7XiSRMR-16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-13" value="Step 3 A (5)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="370" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-16" value="Step 4 (8)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="460" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-20" value="each parenthesized number represent the virtual time the step is submitted to the rayon pool" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="320" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-28" value="Of course this is only a theoretical abstraction. The same effect can be achieved without a true DAG implementation. By tracking the type of node connection and the depth in the DAG, we can achieve correct ordering of the steps in the pipeline. The ordering of steps at the same depth is irrelevant. Thus the main challenge is to track which elements have been added" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="800" width="340" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-29" value="Depth 0" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="400" width="180" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-30" value="Depth 1" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="220" y="400" width="170" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-31" value="Depth 2" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="390" y="340" width="170" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-32" value="Depth 3" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="340" width="190" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-33" value="Depth 4" style="swimlane;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="750" y="340" width="190" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-34" value="Suppose one step is taking a very long time to execute. Well, the suggested design will iterate over ordered list of steps, and append them ot rayon until its queue is full. Since the executions are always in order. We assume some fixed max on the rayon internal capacity, it has its own internal collection to reduce latency in work stealing.&amp;nbsp;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="415" y="800" width="485" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="xm97tIzFpSOHS7XiSRMR-36" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="80" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

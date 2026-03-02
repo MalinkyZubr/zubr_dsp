@@ -1,19 +1,19 @@
 [package]
-name = "ZubrDSP"
+name = "zubr_dsp"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "playback_prototyping"
-path = "prototypes/audio_playback.rs"
-
-[[bin]]
-name = "plotting_prototyping"
-path = "prototypes/plotting.rs"
-
-[[bin]]
-name = "tui_prototyping"
-path = "prototypes/frontend.rs"
+#[[bin]]
+#name = "playback_prototyping"
+#path = "prototypes/audio_playback.rs"
+#
+#[[bin]]
+#name = "plotting_prototyping"
+#path = "prototypes/plotting.rs"
+#
+#[[bin]]
+#name = "tui_prototyping"
+#path = "prototypes/frontend.rs"
 
 [dependencies]
 async-std = "1.13.0"
@@ -53,4 +53,11 @@ tui-big-text = "0.7.1"
 tui-menu = "0.3.0"
 tui-nodes = "0.9.0"
 tui-tree-widget = "0.23.1"
+rayon-core = "1.13.0"
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "full"] }
+async-trait = "0.1.89"
+scc = "3.6.3"
+zubr_state_machine = "0.1.0"
+chrono = "0.4.41"
+serial_test = "3.4.0"
 
