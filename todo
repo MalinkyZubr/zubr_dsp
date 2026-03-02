@@ -1,5 +1,0 @@
-1. generic to Float for all floating point types to make future proofing possible
-2. do the add and save methods for de-padding after fft
-3. implement PLL and such
-4. There is an issue on the upstream state setters that forces all pipeline to puase.
-this is intended behavior EXCEPT for multiplexers. Multiplexers should be allowed to pause individual branches

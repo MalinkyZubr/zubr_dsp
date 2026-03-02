@@ -1,3 +1,5 @@
 /target
 *.mp3
 *.wav
+Cargo.lock
+.vscode

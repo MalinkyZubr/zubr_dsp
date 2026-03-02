@@ -13,8 +13,8 @@
         <mxCell id="jdwiW35CzVLMYtRzhfuA-9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="jdwiW35CzVLMYtRzhfuA-2" target="jdwiW35CzVLMYtRzhfuA-8">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="jdwiW35CzVLMYtRzhfuA-2" value="add_channel()&lt;div&gt;create a dummy node and add it&#39;s communicator to list. Must have the same input and output as the root node (on which establish channels was called)&lt;br&gt;&lt;br&gt;returns another Node, on which step can be appended&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-          <mxGeometry x="440" y="240" width="120" height="260" as="geometry" />
+        <mxCell id="jdwiW35CzVLMYtRzhfuA-2" value="add_channel()&lt;div&gt;create a dummy node and add it&#39;s communicator to list. Must have the same input and output as the root node (on which establish channels was called)&lt;br&gt;&lt;br&gt;also take a flag to say if it is a synchronized node,&amp;nbsp;&lt;br&gt;&lt;br&gt;returns another Node, on which step can be appended&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="225" width="120" height="290" as="geometry" />
         </mxCell>
         <mxCell id="jdwiW35CzVLMYtRzhfuA-4" value="establish_channels()&lt;br&gt;marks the node as a channel divider. Effectively cap the current builder chain.&lt;br&gt;&lt;br&gt;Return self" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
           <mxGeometry x="260" y="280" width="120" height="180" as="geometry" />
@@ -26,7 +26,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="jdwiW35CzVLMYtRzhfuA-7" value="Pipeline objects should be organized by flow branch in separate vectors to organize the TUI display. Memory wise, the same, except more nested vectors" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="320" y="80" width="120" height="150" as="geometry" />
+          <mxGeometry x="260" y="75" width="120" height="150" as="geometry" />
         </mxCell>
         <mxCell id="jdwiW35CzVLMYtRzhfuA-8" value="lock_channels()&lt;br&gt;prevent adding of additional channels. Similar to cap pipeline, creats SIMO mpsc connector (asynchronous to prevent slowest branch lockup)&lt;br&gt;Takes a step as input, which outputs a vector of the input datatype which gets passed in order to consumer channels (whether multiple copies or separate chunks of the same data)&lt;br&gt;&lt;br&gt;returns nothing" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
           <mxGeometry x="600" y="190" width="120" height="360" as="geometry" />
@@ -54,6 +54,9 @@
         </mxCell>
         <mxCell id="jdwiW35CzVLMYtRzhfuA-17" value="Architecture ensures that separate brnaches can have separate sinks, whether that be visual or practical (ie a tui widget, or an actual USB/ethernet interface) without interfering with overall functionality. Ensures maximum flexibility when designing processing systems. Would even probably allow for&amp;nbsp; a distributed architecture in future, using kubernetes or some other similar system" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="610" y="615" width="120" height="385" as="geometry" />
+        </mxCell>
+        <mxCell id="jdwiW35CzVLMYtRzhfuA-18" value="each thread should manage the kill signal to async tasks. each mpsc channel should have a true sender, and kill sender. Send enum of datatype and killflag" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="190" width="120" height="160" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
