@@ -95,9 +95,7 @@ pub struct PipelineGraph {
 impl PipelineGraph {
     pub fn new(build_vector: Rc<RefCell<PipelineBuildVector>>) -> Self {
         let nodes = match Rc::try_unwrap(build_vector) {
-            Ok(build_vector) => {
-                build_vector.into_inner().consume()
-            }
+            Ok(build_vector) => build_vector.into_inner().consume(),
             Err(_) => panic!("PipelineBuildVector is not cloneable"),
         };
 

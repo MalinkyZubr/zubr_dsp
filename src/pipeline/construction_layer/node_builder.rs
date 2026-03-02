@@ -40,7 +40,7 @@ impl PipelineBuildVector {
         self.nodes.push(node);
         self.nodes.sort_by(|a, b| a.1.cmp(&b.1))
     }
-    
+
     pub fn get_new_id(&mut self) -> usize {
         let out = self.id_counter;
         self.id_counter += 1;
@@ -55,7 +55,6 @@ impl PipelineBuildVector {
         &self.parameters
     }
 }
-
 
 #[derive(Clone, PartialEq, Eq, Debug, ConstParamTy)]
 pub enum IntoWhat {

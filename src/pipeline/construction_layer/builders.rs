@@ -7,8 +7,6 @@ use crate::pipeline::construction_layer::pipeline_traits::{Sharable, Sink, Sourc
 use std::cell::RefCell;
 use std::rc::Rc;
 
-
-
 pub struct NodeBuilder<
     I: Sharable,
     O: Sharable,
@@ -17,7 +15,7 @@ pub struct NodeBuilder<
     const VARIANT: IntoWhat,
 > {
     node_predecessor: BuildingNode<I, O, NI, NO, VARIANT>,
-    build_vector: Rc<RefCell<PipelineBuildVector>>
+    build_vector: Rc<RefCell<PipelineBuildVector>>,
 }
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: IntoWhat>
     NodeBuilder<I, O, NI, NO, VARIANT>
@@ -219,7 +217,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         self
     }
 
-    pub fn attach_series_reconstructor<const NON: usize, const ND: usize> (
+    pub fn attach_series_reconstructor<const NON: usize, const ND: usize>(
         &mut self,
         name: String,
     ) -> NodeBuilder<O, Vec<O>, 1, NON, { IntoWhat::ReconstructorNode }> {

@@ -2,8 +2,7 @@
 #[serial_test::serial]
 mod tests {
     use crate::infrastructure::test_models::{
-        verify_input_output, TestLinearI32Mult, TestSinkI32, TestSinkI32Vec,
-        TestSourceI32Vec,
+        verify_input_output, TestLinearI32Mult, TestSinkI32, TestSinkI32Vec, TestSourceI32Vec,
     };
     use log::{error, Level};
     use std::cell::RefCell;

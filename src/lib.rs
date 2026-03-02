@@ -13,9 +13,7 @@ pub mod pipeline;
 static INIT: Once = Once::new();
 
 pub fn initiate_pipeline(log_level: Level) {
-    INIT.call_once(|| {
-        if let Err(_) = init_stdout_logger(log_level) {}
-    });
+    INIT.call_once(|| if let Err(_) = init_stdout_logger(log_level) {});
 }
 
 // use pipeline::orchestration_layer::logging::initialize_logger;

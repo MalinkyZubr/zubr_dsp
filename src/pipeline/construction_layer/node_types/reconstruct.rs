@@ -46,7 +46,7 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
     async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
         let mut results = vec![];
         for _ in 0..self.receive_demands {
-            results.push(self.input.recv_async().await.unwrap()); // unwrap is okay because this assumes all predecessors are ready 
+            results.push(self.input.recv_async().await.unwrap()); // unwrap is okay because this assumes all predecessors are ready
         }
 
         iterative_send(&mut self.output, results).await.ok()
@@ -62,20 +62,21 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
-    use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
     use tokio::sync::Notify;
-    
 
-    fn create_test_channels<T: Sharable>(buffer_size: usize) -> (WrappedSender<T>, WrappedReceiver<T>) {
+    fn create_test_channels<T: Sharable>(
+        buffer_size: usize,
+    ) -> (WrappedSender<T>, WrappedReceiver<T>) {
         let (tx, rx) = mpsc::channel(buffer_size);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
-        
+
         (
             WrappedSender::new(tx, 1, notify.clone(), capacity.clone()),
-            WrappedReceiver::new(rx, 0, notify, capacity)
+            WrappedReceiver::new(rx, 0, notify, capacity),
         )
     }
 
@@ -84,13 +85,9 @@ mod tests {
         let (_, input) = create_test_channels::<i32>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
-        let reconstructor = PipelineSeriesReconstructor::new(
-            input,
-            [output1, output2],
-            3
-        );
-        
+
+        let reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 3);
+
         assert_eq!(reconstructor.receive_demands, 3);
         assert_eq!(reconstructor.get_num_inputs(), 1);
         assert_eq!(reconstructor.get_num_outputs(), 2);
@@ -103,13 +100,9 @@ mod tests {
         let (_, input) = create_test_channels::<i32>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
-        let reconstructor = PipelineSeriesReconstructor::new(
-            input,
-            [output1, output2],
-            2
-        );
-        
+
+        let reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 2);
+
         let successors = reconstructor.get_successors();
         assert_eq!(successors.len(), 2);
         assert!(successors.contains(&1));
@@ -121,13 +114,9 @@ mod tests {
         let (_, input) = create_test_channels::<i32>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
-        let mut reconstructor = PipelineSeriesReconstructor::new(
-            input,
-            [output1, output2],
-            1
-        );
-        
+
+        let mut reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 1);
+
         reconstructor.load_initial_state();
     }
 
@@ -136,12 +125,8 @@ mod tests {
         let (mut tx, input) = create_test_channels(10);
         let (output1, mut rx1) = create_test_channels(10);
         let (output2, mut rx2) = create_test_channels(10);
-        
-        let mut reconstructor = PipelineSeriesReconstructor::new(
-            input,
-            [output1, output2],
-            2
-        );
+
+        let mut reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 2);
 
         // Send test data
         tx.send(1).await.unwrap();
@@ -154,7 +139,7 @@ mod tests {
         // Verify both outputs received the data
         let received1 = rx1.recv_async().await.unwrap();
         let received2 = rx2.recv_async().await.unwrap();
-        
+
         assert_eq!(received1, vec![1, 2]);
         assert_eq!(received2, vec![1, 2]);
     }

@@ -5,9 +5,8 @@ use std::fmt::Debug;
 pub enum RunModel {
     IO,
     CPU,
-    Communicator
+    Communicator,
 }
-
 
 #[async_trait]
 pub trait CollectibleNode: Send + Sync + 'static {

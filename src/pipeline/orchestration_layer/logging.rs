@@ -5,7 +5,7 @@ use std::sync::Arc;
 pub trait LogOutput: Send + Sync {
     /// Write a formatted log message to the output destination
     fn write(&self, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    
+
     /// Flush any buffered output (optional, default implementation does nothing)
     fn flush(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(())
@@ -23,7 +23,7 @@ impl GlobalLogger {
     pub fn new(output: Arc<dyn LogOutput>, level: Level) -> Self {
         Self { output, level }
     }
-    
+
     /// Format a log record into a string
     fn format_record(&self, record: &Record) -> String {
         let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
@@ -73,7 +73,7 @@ impl LogOutput for StdoutOutput {
         println!("{}", message);
         Ok(())
     }
-    
+
     fn flush(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use std::io::{self, Write};
         io::stdout().flush()?;
@@ -82,10 +82,7 @@ impl LogOutput for StdoutOutput {
 }
 
 /// Initialize the global logger with the specified output and level
-pub fn init_logger(
-    output: Arc<dyn LogOutput>,
-    level: Level,
-) -> Result<(), SetLoggerError> {
+pub fn init_logger(output: Arc<dyn LogOutput>, level: Level) -> Result<(), SetLoggerError> {
     let logger = GlobalLogger::new(output, level);
     log::set_boxed_logger(Box::new(logger))?;
     log::set_max_level(level.to_level_filter());
@@ -106,26 +103,26 @@ pub fn init_default_logger() -> Result<(), SetLoggerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
     use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
 
     // Mock output for testing
     struct MockOutput {
         messages: Arc<Mutex<VecDeque<String>>>,
     }
-    
+
     impl MockOutput {
         fn new() -> Self {
             Self {
                 messages: Arc::new(Mutex::new(VecDeque::new())),
             }
         }
-        
+
         fn get_messages(&self) -> Vec<String> {
             self.messages.lock().unwrap().drain(..).collect()
         }
     }
-    
+
     impl LogOutput for MockOutput {
         fn write(&self, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             self.messages.lock().unwrap().push_back(message.to_string());
@@ -145,7 +142,7 @@ mod tests {
     fn test_logger_level_filtering() {
         let mock_output = Arc::new(MockOutput::new());
         let logger = GlobalLogger::new(mock_output.clone(), Level::Warn);
-        
+
         // Test that debug messages are filtered out
         let debug_record = log::Record::builder()
             .level(Level::Debug)
@@ -153,9 +150,9 @@ mod tests {
             .file(Some("test.rs"))
             .line(Some(1))
             .build();
-        
+
         assert!(!logger.enabled(debug_record.metadata()));
-        
+
         // Test that error messages are allowed
         let error_record = log::Record::builder()
             .level(Level::Error)
@@ -163,7 +160,7 @@ mod tests {
             .file(Some("test.rs"))
             .line(Some(1))
             .build();
-        
+
         assert!(logger.enabled(error_record.metadata()));
     }
 
@@ -171,16 +168,16 @@ mod tests {
     fn test_logger_formatting() {
         let mock_output = Arc::new(MockOutput::new());
         let logger = GlobalLogger::new(mock_output.clone(), Level::Debug);
-        
+
         let record = log::Record::builder()
             .level(Level::Info)
             .args(format_args!("test message"))
             .file(Some("test.rs"))
             .line(Some(42))
             .build();
-        
+
         logger.log(&record);
-        
+
         let messages = mock_output.get_messages();
         assert_eq!(messages.len(), 1);
         assert!(messages[0].contains("INFO"));
@@ -193,7 +190,7 @@ mod tests {
         // Reset logger for testing
         // Note: In a real application, you'd typically only initialize once
         assert!(init_default_logger().is_ok());
-        
+
         // Test that logging works
         log::info!("This is a test log message");
         log::debug!("This debug message should not appear with info level");

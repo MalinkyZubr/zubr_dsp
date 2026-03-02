@@ -1,7 +1,7 @@
-use std::collections::HashSet;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize> {
@@ -46,7 +46,8 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
     fn get_num_outputs(&self) -> usize {
         NUM_CHANNELS
     }
-    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> { // very inefficient function. Optimize later
+    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
+        // very inefficient function. Optimize later
         match self.buffered_data.take() {
             Some(data) => {
                 let mut satiated_edges: HashSet<usize> = HashSet::new();
@@ -54,7 +55,7 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
                     let sender = &mut self.output[index];
                     match sender.send(val).await {
                         Ok(_) => (),
-                        Err(_) => return None
+                        Err(_) => return None,
                     }
                     if sender.channel_satiated() {
                         satiated_edges.insert(*sender.get_dest_id());
@@ -89,20 +90,21 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
-    use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
     use tokio::sync::Notify;
-    
 
-    fn create_test_channels<T: Sharable>(buffer_size: usize) -> (WrappedSender<T>, WrappedReceiver<T>) {
+    fn create_test_channels<T: Sharable>(
+        buffer_size: usize,
+    ) -> (WrappedSender<T>, WrappedReceiver<T>) {
         let (tx, rx) = mpsc::channel(buffer_size);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
-        
+
         (
             WrappedSender::new(tx, 1, notify.clone(), capacity.clone()),
-            WrappedReceiver::new(rx, 0, notify, capacity)
+            WrappedReceiver::new(rx, 0, notify, capacity),
         )
     }
 
@@ -112,9 +114,9 @@ mod tests {
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
         let (output3, _) = create_test_channels(10);
-        
+
         let separator = PipelineInterleavedSeparator::new(input, [output1, output2, output3]);
-        
+
         assert_eq!(separator.get_num_inputs(), 1);
         assert_eq!(separator.get_num_outputs(), 3);
         assert!(!separator.has_initial_state());
@@ -126,9 +128,9 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
+
         let separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
-        
+
         let successors = separator.get_successors();
         assert_eq!(successors.len(), 2);
         assert!(successors.contains(&1));
@@ -139,9 +141,9 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
+
         let separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
-        
+
         // When buffered_data is None, should return CPU
         assert_eq!(separator.get_run_model(), RunModel::CPU);
     }
@@ -151,10 +153,10 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
+
         let mut separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
         separator.buffered_data = Some([vec![1], vec![2]]);
-        
+
         // When buffered_data is Some, should return Communicator
         assert_eq!(separator.get_run_model(), RunModel::Communicator);
     }
@@ -165,9 +167,9 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
+
         let mut separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
-        
+
         separator.load_initial_state();
     }
 
@@ -175,17 +177,11 @@ mod tests {
     fn test_call_thread_cpu() {
         // Use tokio runtime for the setup but not for the actual CPU call
         let rt = tokio::runtime::Runtime::new().unwrap();
-        
-        let (mut tx, input) = rt.block_on(async {
-            create_test_channels(10)
-        });
-        let (output1, _) = rt.block_on(async {
-            create_test_channels(10)
-        });
-        let (output2, _) = rt.block_on(async {
-            create_test_channels(10)
-        });
-        
+
+        let (mut tx, input) = rt.block_on(async { create_test_channels(10) });
+        let (output1, _) = rt.block_on(async { create_test_channels(10) });
+        let (output2, _) = rt.block_on(async { create_test_channels(10) });
+
         let mut separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
 
         // Send test data using the runtime
@@ -207,14 +203,11 @@ mod tests {
         let (_, input) = create_test_channels(10);
         let (output1, mut rx1) = create_test_channels(10);
         let (output2, mut rx2) = create_test_channels(10);
-        
+
         let mut separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
-        
+
         // Set up buffered data
-        separator.buffered_data = Some([
-            vec![1,3],
-            vec![2,4]
-        ]);
+        separator.buffered_data = Some([vec![1, 3], vec![2, 4]]);
 
         // Run the senders
         let result = separator.run_senders(0).await;
@@ -223,10 +216,10 @@ mod tests {
         // Verify data was sent to outputs
         let received1 = rx1.recv_async().await.unwrap();
         let received2 = rx2.recv_async().await.unwrap();
-        
-        assert_eq!(received1, vec![1,3]);
-        assert_eq!(received2, vec![2,4]);
-        
+
+        assert_eq!(received1, vec![1, 3]);
+        assert_eq!(received2, vec![2, 4]);
+
         // Verify buffered_data was consumed
         assert!(separator.buffered_data.is_none());
     }
@@ -236,7 +229,7 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels::<Vec<i32>>(10);
         let (output2, _) = create_test_channels::<Vec<i32>>(10);
-        
+
         let mut separator = PipelineInterleavedSeparator::new(input, [output1, output2]);
 
         // Run the senders without buffered data

@@ -9,7 +9,8 @@ mod tests {
     use tokio::sync::mpsc::{channel, Receiver};
     use zubr_dsp::initiate_pipeline;
     use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
-    use zubr_dsp::pipeline::construction_layer::node_builder::{IntoWhat, PipelineBuildVector, PipelineParameters,
+    use zubr_dsp::pipeline::construction_layer::node_builder::{
+        IntoWhat, PipelineBuildVector, PipelineParameters,
     };
     use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
     use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::work_stealing_full_buffer::{
