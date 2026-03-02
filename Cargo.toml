@@ -7,6 +7,7 @@ description = "a modular, fully parallelizable DSP pipeline for rust"
 keywords = ["DSP", "zubr", "signal-processing", "parallelism"]
 categories = ["concurrency", "asynchronous", "encoding", "mathematics", "multimedia"]
 readme = "readme.md"
+repository = "https://github.com/MalinkyZubr/zubr_dsp"
 
 [dependencies]
 async-std = "1.13.0"
