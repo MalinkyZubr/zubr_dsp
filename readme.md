@@ -38,12 +38,22 @@ This is by no means a replacement to gnuradio. But eventually, a tool people can
 ### WIP
 
 ## Usage
-
+* Requries nightly release of Rust
+* only tested on Ubuntu linux
 * usage details are not provided yet since the project is still in very early stages of development. THIS IS NOT PRODUCTION READY and wont be for quite a while. But do keep your eyes peeled
 
 ## Testing
-
-From the project root directory, just run cargo --test. For now, this is the only running feature of the project, to verify marked items in the feature list.
+1. git clone https://github.com/MalinkyZubr/zubr_dsp.git
+2. cd zubr_dsp
+3. sudo apt-get update
+   sudo apt-get install -y \
+   pkg-config \
+   libasound2-dev \
+   libfontconfig1-dev \
+   libfreetype6-dev \
+   libexpat1-dev
+4. rustup default nightly
+5. cargo test
 
 ## Contribution
 
