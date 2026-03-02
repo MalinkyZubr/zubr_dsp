@@ -17,6 +17,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev pkg-config
+          pkg-config \
+          libfontconfig1-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
