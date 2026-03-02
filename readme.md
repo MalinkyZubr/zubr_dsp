@@ -1,4 +1,4 @@
-# Rust-template
+# zubr_dsp
 
 [![Rust CI](https://github.com/MalinkyZubr/zubr_dsp/actions/workflows/ci.yml/badge.svg)](https://github.com/MalinkyZubr/zubr_dsp/actions/workflows/ci.yml)
 
