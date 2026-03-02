@@ -1,6 +1,6 @@
 # Rust-template
 
-![Build Status](https://github.com/MalinkyZubr/zubr_dsp/workflows/Rust/badge.svg)
+[![Rust CI](https://github.com/MalinkyZubr/zubr_dsp/actions/workflows/ci.yml/badge.svg)](https://github.com/MalinkyZubr/zubr_dsp/actions/workflows/ci.yml)
 
 A highly modular signal processing pipeline designed for flexibility in parallel contexts.
 
