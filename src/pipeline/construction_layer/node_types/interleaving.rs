@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use futures::SinkExt;
 
 #[derive(Debug)]
 pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize> {
@@ -47,7 +46,7 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
     fn get_num_outputs(&self) -> usize {
         NUM_CHANNELS
     }
-    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> { // very inefficient function. Optimize later
+    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> { // very inefficient function. Optimize later
         match self.buffered_data.take() {
             Some(data) => {
                 let mut satiated_edges: HashSet<usize> = HashSet::new();
@@ -73,7 +72,7 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
         false
     }
 
-    fn call_thread_cpu(&mut self, id: usize) {
+    fn call_thread_cpu(&mut self, _id: usize) {
         let input: Vec<I> = self.input.recv().unwrap();
         let mut output_values: [Vec<I>; NUM_CHANNELS] =
             vec![Vec::new(); NUM_CHANNELS].try_into().unwrap();

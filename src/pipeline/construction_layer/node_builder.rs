@@ -6,10 +6,10 @@ use crate::pipeline::construction_layer::node_types::pipeline_node::PipelineNode
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeriesReconstructor;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use log::{debug, info};
 use std::collections::HashMap;
 use std::marker::ConstParamTy;
 use std::sync::atomic::AtomicUsize;
-use log::info;
 
 #[derive(Clone)]
 pub struct PipelineParameters {
@@ -17,10 +17,11 @@ pub struct PipelineParameters {
 }
 impl PipelineParameters {
     pub fn new(buff_size: usize) -> Self {
-        Self { buff_size: buff_size }
+        Self {
+            buff_size: buff_size,
+        }
     }
 }
-
 
 pub struct PipelineBuildVector {
     nodes: Vec<(usize, String, Box<dyn CollectibleNode>)>,
@@ -34,7 +35,7 @@ impl PipelineBuildVector {
         }
     }
     pub fn add_node(&mut self, node: (usize, String, Box<dyn CollectibleNode>)) {
-        info!("Adding node {}", node.0);
+        info!("Adding node {} {:?}", node.0, node.2.get_run_model());
         self.nodes.push(node);
         self.nodes.sort_by(|a, b| a.1.cmp(&b.1))
     }
@@ -49,20 +50,23 @@ impl PipelineBuildVector {
 }
 
 static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+pub fn reset_node_id_counter() {
+    NODE_ID_COUNTER.store(0, std::sync::atomic::Ordering::SeqCst);
+}
 
 #[derive(Clone, PartialEq, Eq, Debug, ConstParamTy)]
 pub enum IntoWhat {
-    CPU_NODE,
-    IO_NODE,
-    INTERLEAVER_NODE,
-    DECONSTRUCTOR_NODE,
-    RECONSTRUCTOR_NODE,
+    CpuNode,
+    IoNode,
+    InterleaverNode,
+    DeconstructorNode,
+    ReconstructorNode,
 }
 impl IntoWhat {
     pub fn run_model(&self) -> RunModel {
         match self {
-            Self::CPU_NODE | Self::INTERLEAVER_NODE => RunModel::CPU,
-            Self::IO_NODE => RunModel::IO,
+            Self::CpuNode | Self::InterleaverNode => RunModel::CPU,
+            Self::IoNode => RunModel::IO,
             _ => RunModel::Communicator,
         }
     }
@@ -136,6 +140,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         }
         let step = self.step.take().unwrap();
 
+        debug!("Building node {}, {}", self.id, self.name);
         let new_node: PipelineNode<I, O, NI, NO> = PipelineNode::new(
             step,
             self.inputs,
@@ -149,7 +154,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
 }
 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
-    BuildingNode<I, O, NI, NO, { IntoWhat::IO_NODE }>
+    BuildingNode<I, O, NI, NO, { IntoWhat::IoNode }>
 {
     pub fn build_io_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
@@ -160,7 +165,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
 }
 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
-    BuildingNode<I, O, NI, NO, { IntoWhat::CPU_NODE }>
+    BuildingNode<I, O, NI, NO, { IntoWhat::CpuNode }>
 {
     pub fn build_cpu_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
@@ -171,7 +176,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
 }
 
 impl<T: Sharable, const NO: usize>
-    BuildingNode<Vec<T>, Vec<T>, 1, NO, { IntoWhat::INTERLEAVER_NODE }>
+    BuildingNode<Vec<T>, Vec<T>, 1, NO, { IntoWhat::InterleaverNode }>
 {
     fn into_interleaved_separator(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
@@ -196,9 +201,7 @@ impl<T: Sharable, const NO: usize>
         self.into_interleaved_separator()
     }
 }
-impl<T: Sharable, const NO: usize>
-    BuildingNode<Vec<T>, T, 1, NO, { IntoWhat::DECONSTRUCTOR_NODE }>
-{
+impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, T, 1, NO, { IntoWhat::DeconstructorNode }> {
     fn into_series_deconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -223,9 +226,7 @@ impl<T: Sharable, const NO: usize>
     }
 }
 
-impl<T: Sharable, const NO: usize>
-    BuildingNode<T, Vec<T>, 1, NO, { IntoWhat::RECONSTRUCTOR_NODE }>
-{
+impl<T: Sharable, const NO: usize> BuildingNode<T, Vec<T>, 1, NO, { IntoWhat::ReconstructorNode }> {
     fn into_series_reconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");

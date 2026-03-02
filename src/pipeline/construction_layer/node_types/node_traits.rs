@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use std::fmt::Debug;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunModel {
@@ -26,10 +25,10 @@ pub trait CollectibleNode: Send + Sync + 'static {
         self.get_num_outputs() == 0
     }
     fn get_run_model(&self) -> RunModel;
-    fn call_thread_cpu(&mut self, id: usize) {
+    fn call_thread_cpu(&mut self, _id: usize) {
         panic!("CPU thread is not implemented for this node type");
     }
-    async fn call_thread_io(&mut self, id: usize) {
+    async fn call_thread_io(&mut self, _id: usize) {
         panic!("IO thread is not implemented for this node type");
     }
 }

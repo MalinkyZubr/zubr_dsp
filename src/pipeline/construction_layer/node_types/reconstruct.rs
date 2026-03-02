@@ -43,7 +43,7 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
     fn get_num_outputs(&self) -> usize {
         NO
     }
-    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> {
+    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
         let mut results = vec![];
         for _ in 0..self.receive_demands {
             results.push(self.input.recv_async().await.unwrap()); // unwrap is okay because this assumes all predecessors are ready 

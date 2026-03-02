@@ -1,7 +1,6 @@
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use futures::SinkExt;
 
 #[derive(Debug)]
 pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize> {
@@ -18,7 +17,7 @@ impl<I: Sharable, const NO: usize> PipelineSeriesDeconstructor<I, NO> {
 
 #[async_trait::async_trait]
 impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstructor<I, NO> {
-    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> {
+    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
         let received = self.input.recv_async().await.unwrap();
         for item in received {
             for sender in self.output.iter_mut() {
@@ -64,20 +63,21 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstruct
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
-    use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
     use tokio::sync::Notify;
-    
 
-    fn create_test_channels<T: Sharable>(buffer_size: usize) -> (WrappedSender<T>, WrappedReceiver<T>) {
+    fn create_test_channels<T: Sharable>(
+        buffer_size: usize,
+    ) -> (WrappedSender<T>, WrappedReceiver<T>) {
         let (tx, rx) = mpsc::channel(buffer_size);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
-        
+
         (
             WrappedSender::new(tx, 1, notify.clone(), capacity.clone()),
-            WrappedReceiver::new(rx, 0, notify, capacity)
+            WrappedReceiver::new(rx, 0, notify, capacity),
         )
     }
 
@@ -86,9 +86,9 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels::<i32>(10);
         let (output2, _) = create_test_channels::<i32>(10);
-        
+
         let deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
-        
+
         assert_eq!(deconstructor.get_num_inputs(), 1);
         assert_eq!(deconstructor.get_num_outputs(), 2);
         assert!(!deconstructor.has_initial_state());
@@ -100,9 +100,9 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
+
         let deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
-        
+
         let successors = deconstructor.get_successors();
         assert_eq!(successors.len(), 2);
         assert!(successors.contains(&1));
@@ -114,9 +114,9 @@ mod tests {
         let (_, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, _) = create_test_channels(10);
         let (output2, _) = create_test_channels(10);
-        
+
         let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
-        
+
         deconstructor.load_initial_state();
     }
 
@@ -125,11 +125,11 @@ mod tests {
         let (mut tx, input) = create_test_channels(10);
         let (output1, mut rx1) = create_test_channels(10);
         let (output2, mut rx2) = create_test_channels(10);
-        
+
         let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
 
         // Send test data
-        let test_vec = vec![1,2,3];
+        let test_vec = vec![1, 2, 3];
         tx.send(test_vec).await.unwrap();
 
         // Run the deconstructor
@@ -140,7 +140,7 @@ mod tests {
         for expected_value in [1, 2, 3] {
             let received1 = rx1.recv_async().await.unwrap();
             let received2 = rx2.recv_async().await.unwrap();
-            
+
             assert_eq!(received1, expected_value);
             assert_eq!(received2, expected_value);
         }
@@ -151,7 +151,7 @@ mod tests {
         let (mut tx, input) = create_test_channels::<Vec<i32>>(10);
         let (output1, mut rx1) = create_test_channels::<i32>(10);
         let (output2, mut rx2) = create_test_channels::<i32>(10);
-        
+
         let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
 
         // Send empty vector

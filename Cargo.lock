@@ -3,55 +3,6 @@
 version = 4
 
 [[package]]
-name = "ZubrDSP"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "async-trait",
- "atomic_enum",
- "awedio",
- "chrono",
- "color-eyre",
- "crossbeam",
- "crossbeam-queue",
- "crossterm",
- "directories",
- "env_logger",
- "futures",
- "itertools 0.14.0",
- "lazy_static",
- "log",
- "num",
- "num_enum 0.7.4",
- "piston_window 0.132.0",
- "plotters",
- "plotters-piston",
- "rand 0.9.1",
- "ratatui",
- "rayon",
- "rayon-core",
- "rodio",
- "rusb",
- "rustfft",
- "scc",
- "strum",
- "symphonia",
- "systemstat",
- "thread-priority",
- "tokio",
- "tracing",
- "tracing-error",
- "tracing-subscriber",
- "tui-big-text",
- "tui-logger",
- "tui-menu",
- "tui-nodes",
- "tui-tree-widget",
- "unicode-width 0.2.0",
- "zubr_state_machine",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6102,6 +6053,55 @@ dependencies = [
  "proc-macro2 1.0.95",
  "quote 1.0.40",
  "syn 2.0.103",
+]
+
+[[package]]
+name = "zubr_dsp"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "atomic_enum",
+ "awedio",
+ "chrono",
+ "color-eyre",
+ "crossbeam",
+ "crossbeam-queue",
+ "crossterm",
+ "directories",
+ "env_logger",
+ "futures",
+ "itertools 0.14.0",
+ "lazy_static",
+ "log",
+ "num",
+ "num_enum 0.7.4",
+ "piston_window 0.132.0",
+ "plotters",
+ "plotters-piston",
+ "rand 0.9.1",
+ "ratatui",
+ "rayon",
+ "rayon-core",
+ "rodio",
+ "rusb",
+ "rustfft",
+ "scc",
+ "strum",
+ "symphonia",
+ "systemstat",
+ "thread-priority",
+ "tokio",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber",
+ "tui-big-text",
+ "tui-logger",
+ "tui-menu",
+ "tui-nodes",
+ "tui-tree-widget",
+ "unicode-width 0.2.0",
+ "zubr_state_machine",
 ]
 
 [[package]]

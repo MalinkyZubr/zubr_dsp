@@ -5,8 +5,8 @@ use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNo
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
-use std::fmt::Debug;
 use futures::future::join_all;
+use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
@@ -26,6 +26,16 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
         initial_state: Option<O>,
         run_model: RunModel,
     ) -> PipelineNode<I, O, NI, NO> {
+        assert_eq!(
+            input.len(),
+            NI,
+            "Number of inputs must match the number of inputs in the step"
+        );
+        assert_eq!(
+            output.len(),
+            NO,
+            "Number of outputs must match the number of outputs in the step"
+        );
         let input: [WrappedReceiver<I>; NI] = input.try_into().unwrap();
         let output: [WrappedSender<O>; NO] = output.try_into().unwrap();
 
@@ -52,8 +62,15 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
     }
 
     async fn receive_input_async(&mut self) -> [I; NI] {
-        let futures = self.input.iter_mut().map(|r: &mut WrappedReceiver<I>| r.recv_async());
-        let vec = join_all(futures).await.into_iter().flatten().collect::<Vec<I>>();
+        let futures = self
+            .input
+            .iter_mut()
+            .map(|r: &mut WrappedReceiver<I>| r.recv_async());
+        let vec = join_all(futures)
+            .await
+            .into_iter()
+            .flatten()
+            .collect::<Vec<I>>();
 
         vec.try_into().ok().unwrap()
     }
@@ -71,11 +88,9 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     for PipelineNode<I, O, NI, NO>
 {
-    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>> {
+    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
         match self.buffered_data.take() {
-            Some(output_data) => {
-                iterative_send(&mut self.output, output_data).await.ok()
-            }
+            Some(output_data) => iterative_send(&mut self.output, output_data).await.ok(),
             _ => None,
         }
     }
@@ -108,23 +123,29 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
         }
     }
 
-    fn call_thread_cpu(&mut self, id: usize) {
+    fn call_thread_cpu(&mut self, _id: usize) {
         let received_data: [I; NI] = self.receive_input();
         let compute_result = self.execute_pipeline_step(received_data);
 
-        match compute_result {
-            Ok(value) => self.buffered_data = Some(value),
-            Err(_) => (),
+        if !self.is_sink() {
+            // sinks should ALWAYS skip the buffering step, because they do not have any successors.
+            // if the buffering occurs for a sink, it locks indefinitely because of get_run_model() always returning communicator, which doesnt exist for sink
+            match compute_result {
+                Ok(value) => self.buffered_data = Some(value),
+                Err(_) => (),
+            }
         }
     }
 
-    async fn call_thread_io(&mut self, id: usize) {
+    async fn call_thread_io(&mut self, _id: usize) {
         let received_data: [I; NI] = self.receive_input_async().await;
         let compute_result = self.execute_pipeline_step_io(received_data).await;
 
-        match compute_result {
-            Ok(value) => self.buffered_data = Some(value),
-            Err(_) => (),
+        if !self.is_sink() {
+            match compute_result {
+                Ok(value) => self.buffered_data = Some(value),
+                Err(_) => (),
+            }
         }
     }
 }

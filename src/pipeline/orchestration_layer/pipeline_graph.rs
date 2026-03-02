@@ -195,7 +195,7 @@ impl PipelineGraph {
         )
     }
 
-    pub fn stop_sink(&self, id: usize) {
+    pub fn stop_sink(&self, _id: usize) {
         todo!()
     }
 

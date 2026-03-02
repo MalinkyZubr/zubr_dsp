@@ -4,36 +4,43 @@
 #![feature(adt_const_params)]
 #![allow(dead_code)]
 
+use crate::pipeline::orchestration_layer::logging::init_stdout_logger;
 use log::Level;
-use crate::pipeline::orchestration_layer::logging::{init_default_logger, init_stdout_logger};
+use std::sync::OnceLock;
 
 pub mod pipeline;
 
-
+static INIT: OnceLock<()> = OnceLock::new();
 pub fn initiate_pipeline(log_level: Level) {
-    init_stdout_logger(log_level).expect("Failed to initialize logger");
+    match INIT.get() {
+        None => {
+            init_stdout_logger(log_level).expect("Failed to initialize logger");
+            let _ = INIT.set(());
+        }
+        _ => (),
+    }
 }
 
 // use pipeline::orchestration_layer::logging::initialize_logger;
-// 
-// 
+//
+//
 // mod pipeline;
 // mod ddp;
 // mod dsp;
 // mod general;
 // mod tests;
 // //mod frontend;
-// 
+//
 // use color_eyre::Result;
 // use ratatui::{
 //     style::Stylize
-// 
+//
 //     ,
 //     widgets::Widget
 //     ,
 // };
 // use strum::IntoEnumIterator;
-// 
+//
 fn main() -> Result<(), ()> {
     Ok(())
 }
