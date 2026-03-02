@@ -1,19 +1,12 @@
 [package]
 name = "zubr_dsp"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
-
-#[[bin]]
-#name = "playback_prototyping"
-#path = "prototypes/audio_playback.rs"
-#
-#[[bin]]
-#name = "plotting_prototyping"
-#path = "prototypes/plotting.rs"
-#
-#[[bin]]
-#name = "tui_prototyping"
-#path = "prototypes/frontend.rs"
+license-file = "LICENSE"
+description = "a modular, fully parallelizable DSP pipeline for rust"
+keywords = ["DSP", "zubr", "signal-processing", "parallelism"]
+categories = ["concurrency", "asynchronous", "encoding", "mathematics", "multimedia"]
+readme = "readme.md"
 
 [dependencies]
 async-std = "1.13.0"
