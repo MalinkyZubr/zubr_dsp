@@ -1,5 +1,5 @@
 # zubr_dsp
-
+![dsp_zubr](dsp_zubr.png)
 [![Rust CI](https://github.com/MalinkyZubr/zubr_dsp/actions/workflows/ci.yml/badge.svg)](https://github.com/MalinkyZubr/zubr_dsp/actions/workflows/ci.yml)
 
 A highly modular signal processing pipeline designed for flexibility in parallel contexts.
