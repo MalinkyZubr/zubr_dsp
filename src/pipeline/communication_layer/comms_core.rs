@@ -349,3 +349,4 @@ mod tests {
         assert_eq!(result, "notified");
     }
 }
+// using oneshot channel may optimize these operations
