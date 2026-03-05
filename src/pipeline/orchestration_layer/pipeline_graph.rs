@@ -143,6 +143,18 @@ impl PipelineGraph {
         }
     }
 
+    pub fn get_all_mutable_state(&self) -> Vec<Box<dyn CollectibleNode>> {
+        let mut mutable_states = Vec::with_capacity(self.mutable_state_map.len());
+
+        for id in 0..self.node_immutable_data.len() {
+            if let Some((_id, node)) = self.mutable_state_map.remove_if_sync(&id, |_| true) {
+                mutable_states.push(node);
+            }
+        }
+
+        mutable_states
+    }
+
     pub fn get_all_sources(&self) -> Vec<usize> {
         let mut sources = vec![];
         for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
