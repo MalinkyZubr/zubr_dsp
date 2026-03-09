@@ -1,5 +1,4 @@
 use super::rodio_source::*;
-use crate::pipeline::api::*;
 use rodio::Sink as RodioSink;
 use rodio::{
     ChannelCount, OutputStream, OutputStreamBuilder, Sample, SampleRate, Source as RodioSource,
