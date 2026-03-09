@@ -2,7 +2,7 @@ use crate::pipeline::interfaces::ODFormat;
 use crate::pipeline::interfaces::PipelineStep;
 use std::f32::consts::PI;
 
-pub struct SinusoidalSource {
+pub struct SinusoidalSource<T> {
     frequency: f32,
     sampling_frequency: f32,
     buff_size: usize,

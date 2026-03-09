@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 pub trait HasDefault {
     fn default() -> Self;
@@ -22,3 +23,6 @@ pub trait HasID {
     fn get_id(&self) -> String;
     fn set_id(&mut self, id: &str);
 }
+
+
+pub trait ValidOperand<T> = Add<Output = T> + Sub + Mul + Div + Neg + PartialEq + Debug + Clone;
