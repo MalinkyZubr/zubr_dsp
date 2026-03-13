@@ -1,5 +1,4 @@
 //pub mod ref_based;
 pub mod linear;
-pub mod tests;
 pub mod fftshift;
-pub mod bit_reversal_optimized;
+pub mod fft;

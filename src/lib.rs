@@ -2,12 +2,14 @@
 #![feature(mpmc_channel, portable_simd, test)]
 #![feature(adt_const_params)]
 #![allow(dead_code)]
+#![feature(generic_const_exprs)]
 
 use crate::pipeline::orchestration_layer::logging::init_stdout_logger;
 use log::Level;
 use std::sync::Once;
 
 pub mod pipeline;
+pub mod dsp;
 
 static INIT: Once = Once::new();
 

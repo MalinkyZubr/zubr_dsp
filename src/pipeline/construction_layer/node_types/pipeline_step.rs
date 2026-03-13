@@ -10,7 +10,7 @@ use std::fmt::Debug;
  */
 #[async_trait]
 pub trait PipelineStep<I: Sharable, O: Sharable, const NI: usize>:
-    Send + Sync + Debug + 'static
+    Send + Sync + 'static
 {
     fn run_cpu(&mut self, _input: [I; NI]) -> Result<O, ()> {
         panic!("run not implemented!")
