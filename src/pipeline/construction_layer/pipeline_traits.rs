@@ -5,7 +5,7 @@ pub trait HasDefault {
     fn default() -> Self;
 }
 
-pub trait Sharable = Send + Sync + Debug + Clone + 'static;
+pub trait Sharable = Send + Sync + Debug + Clone + Copy + Default + 'static;
 
 pub trait Source {}
 pub trait Sink {}
@@ -23,6 +23,3 @@ pub trait HasID {
     fn get_id(&self) -> String;
     fn set_id(&mut self, id: &str);
 }
-
-
-pub trait ValidOperand<T> = Add<Output = T> + Sub + Mul + Div + Neg + PartialEq + Debug + Clone;

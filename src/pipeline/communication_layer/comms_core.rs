@@ -1,4 +1,5 @@
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use bounded_spsc_queue::{Producer, Consumer};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tokio::select;
@@ -6,14 +7,16 @@ use tokio::sync::mpsc::{
     error::SendError as TokioSendError, Receiver as TokioReceiver, Sender as TokioSender,
 };
 use tokio::sync::Notify;
+use crate::pipeline::communication_layer::buffer_management::DataBuffer;
 
 #[derive(Debug)]
-pub struct WrappedSender<T: Sharable> {
+pub struct WrappedSender<T: Sharable, const BuffSize: usize> {
     dest_id: usize,
     is_stopped: bool,
     backpressure_notify: Arc<Notify>,
     sender: TokioSender<T>,
     satiation_capacity: Arc<AtomicUsize>,
+    buffer_consumer: Consumer<DataBuffer<T, BuffSize>>,
 }
 impl<T: Sharable> WrappedSender<T> {
     pub fn new(

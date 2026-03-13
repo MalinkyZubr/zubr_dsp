@@ -32,3 +32,7 @@ now with this in mind. How is the pipeline construction modified?
   prevents error based flow control and safe, simple packetization of data
   * I needa  way to bundle data safety guarantees to make administration and error recovery more graceful
   * maintain separation of concerns. When creating new node contract enum or struct must be passed to determine communication behavior
+
+
+## compile time io construction enforcement
+* every time a new output or input added, create new instance with updated gneeric parameter remaining for that value. Must have the total inputs outputs needed, and current input outputs present

@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use std::fmt::Debug;
 
-#[derive(Debug)]
+
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: [WrappedReceiver<I>; NI],
