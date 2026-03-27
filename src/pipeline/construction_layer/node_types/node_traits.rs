@@ -10,7 +10,8 @@ pub enum RunModel {
 
 #[async_trait]
 pub trait CollectibleNode: Send + Sync + 'static {
-    async fn run_senders(&mut self, id: usize) -> Option<Vec<usize>>; // this return value contains all the successors ready to run
+    async fn run_senders(&mut self, id: usize) -> Option<usize>; // this return value contains all the successors ready to run
+    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize>;
     fn load_initial_state(&mut self);
     fn has_initial_state(&self) -> bool;
     fn get_num_inputs(&self) -> usize;

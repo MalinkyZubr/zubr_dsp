@@ -1,2 +1,2 @@
 pub mod comms_core;
-mod buffer_management;
+pub mod data_management;
