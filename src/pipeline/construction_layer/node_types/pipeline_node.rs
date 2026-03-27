@@ -7,15 +7,19 @@ use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
 use futures::future::join_all;
 use std::fmt::Debug;
+use std::array;
+use crate::pipeline::communication_layer::data_management::DataWrapper;
 
 
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: [WrappedReceiver<I>; NI],
     output: [WrappedSender<O>; NO],
+    satiated_edges: [usize; NO],
     step: Box<dyn PipelineStep<I, O, NI>>,
     initial_state: Option<O>,
-    buffered_data: Option<O>,
+    buffered_data: DataWrapper<O>,
+    output_ready: bool,
     run_model: RunModel,
 }
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I, O, NI, NO> {
@@ -43,44 +47,56 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
             RunModel::Communicator => panic!("A node cannot use the communicator compute model"),
             _ => (),
         };
-
+        
+        let (output_ready, buffered_data) = match initial_state.clone() {
+            Some(val) => (true, DataWrapper::new_with_value(val)),
+            None => (false, DataWrapper::new())
+        };
         PipelineNode {
             input,
             output,
             step,
-            buffered_data: initial_state.clone(),
+            buffered_data,
             initial_state,
+            satiated_edges: [0; NO],
+            output_ready,
             run_model,
         }
     }
 
-    fn receive_input(&mut self) -> [I; NI] {
-        let input: [I; NI] = std::array::from_fn(|i| {
+    fn receive_input(&mut self) -> [DataWrapper<I>; NI] {
+        let input: [DataWrapper<I>; NI] = std::array::from_fn(|i| {
             self.input[i].recv().unwrap() // error handling later when get work
         });
         input
     }
 
-    async fn receive_input_async(&mut self) -> [I; NI] {
-        let futures = self
-            .input
-            .iter_mut()
-            .map(|r: &mut WrappedReceiver<I>| r.recv_async());
-        let vec = join_all(futures)
-            .await
-            .into_iter()
-            .flatten()
-            .collect::<Vec<I>>();
-
-        vec.try_into().ok().unwrap()
+    async fn receive_input_async(&mut self) -> [DataWrapper<I>; NI] {
+        let mut received = [None; NI];
+        
+        for (idx, receiver) in self.input.iter_mut().enumerate() {
+            received[idx] = Some(receiver.recv_async().await);
+        }
+        
+        received.into_iter().map(|x| x.expect("unexpected none")).collect()
     }
 
-    fn execute_pipeline_step(&mut self, input_data: [I; NI]) -> Result<O, ()> {
-        self.step.run_cpu(input_data)
+    fn execute_pipeline_step(&mut self, mut input_data: [DataWrapper<I>; NI]) -> Result<(), ()> {
+        let res = self.step.run_cpu(&mut input_data, &mut self.buffered_data);
+        for (receiver, data_wrapper) in self.input.iter_mut().zip(input_data) {
+            receiver.refill_buffer(data_wrapper);
+        }
+        
+        res
     }
 
-    async fn execute_pipeline_step_io(&mut self, input_data: [I; NI]) -> Result<O, ()> {
-        self.step.run_io(input_data).await
+    async fn execute_pipeline_step_io(&mut self, mut input_data: [DataWrapper<I>; NI]) -> Result<(), ()> {
+        let res = self.step.run_io(&mut input_data, &mut self.buffered_data).await;
+        for (receiver, data_wrapper) in self.input.iter_mut().zip(input_data) {
+            receiver.refill_buffer(data_wrapper);
+        }
+        
+        res
     }
 }
 
@@ -88,15 +104,27 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     for PipelineNode<I, O, NI, NO>
 {
-    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
-        match self.buffered_data.take() {
-            Some(output_data) => iterative_send(&mut self.output, output_data).await.ok(),
-            _ => None,
+    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+        if self.output_ready {
+            iterative_send(&mut self.output, &mut self.satiated_edges, &mut self.buffered_data).await.ok()
+        }
+        else {
+            None
         }
     }
-
+    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
+        if edge_index < NO {
+            Some(self.satiated_edges[edge_index])
+        }
+        else {
+            None
+        }
+    }
     fn load_initial_state(&mut self) {
-        self.buffered_data = self.initial_state.clone()
+        match self.initial_state.clone() {
+            Some(val) => self.buffered_data = DataWrapper::new_with_value(val),
+            None => ()
+        }
     }
     fn has_initial_state(&self) -> bool {
         self.initial_state.is_some()
@@ -117,35 +145,25 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     }
 
     fn get_run_model(&self) -> RunModel {
-        match &self.buffered_data {
-            Some(_) => RunModel::Communicator,
-            None => self.run_model.clone(),
+        if self.output_ready {
+            RunModel::Communicator
+        }
+        else {
+            self.run_model
         }
     }
 
     fn call_thread_cpu(&mut self, _id: usize) {
-        let received_data: [I; NI] = self.receive_input();
+        let received_data: [DataWrapper<I>; NI] = self.receive_input();
         let compute_result = self.execute_pipeline_step(received_data);
 
-        if !self.is_sink() {
-            // sinks should ALWAYS skip the buffering step, because they do not have any successors.
-            // if the buffering occurs for a sink, it locks indefinitely because of get_run_model() always returning communicator, which doesnt exist for sink
-            match compute_result {
-                Ok(value) => self.buffered_data = Some(value),
-                Err(_) => (),
-            }
-        }
+        self.output_ready = compute_result.is_ok() && !self.is_sink();
     }
 
     async fn call_thread_io(&mut self, _id: usize) {
-        let received_data: [I; NI] = self.receive_input_async().await;
+        let received_data: [DataWrapper<I>; NI] = self.receive_input_async().await;
         let compute_result = self.execute_pipeline_step_io(received_data).await;
 
-        if !self.is_sink() {
-            match compute_result {
-                Ok(value) => self.buffered_data = Some(value),
-                Err(_) => (),
-            }
-        }
+        self.output_ready = compute_result.is_ok() && !self.is_sink();
     }
 }

@@ -1,5 +1,6 @@
+use crate::pipeline::communication_layer::data_management::DataWrapper;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use bounded_spsc_queue::{Producer, Consumer};
+use crossbeam_queue::ArrayQueue;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tokio::select;
@@ -7,23 +8,58 @@ use tokio::sync::mpsc::{
     error::SendError as TokioSendError, Receiver as TokioReceiver, Sender as TokioSender,
 };
 use tokio::sync::Notify;
-use crate::pipeline::communication_layer::buffer_management::DataBuffer;
+use tracing::warn;
 
-#[derive(Debug)]
-pub struct WrappedSender<T: Sharable, const BuffSize: usize> {
+
+struct Consumer<T: Sharable> {
+    queue: Arc<ArrayQueue<DataWrapper<T>>>,
+}
+impl<T: Sharable> Consumer<T> {
+    fn new(queue: Arc<ArrayQueue<DataWrapper<T>>>) -> Self {
+        Consumer { queue }
+    }
+    
+    fn try_pop(&mut self) -> Option<DataWrapper<T>> {
+        self.queue.pop()
+    }
+}
+
+
+struct Producer<T: Sharable> {
+    queue: Arc<ArrayQueue<DataWrapper<T>>>,
+}
+impl<T: Sharable> Producer<T> {
+    fn new(queue: Arc<ArrayQueue<DataWrapper<T>>>) -> Self {
+        Producer { queue }
+    }
+    
+    fn try_push(&mut self, data: DataWrapper<T>) -> Option<()> {
+        self.queue.push(data).ok()
+    }
+}
+
+
+fn make_crossbeam_queue_handles<T: Sharable>(capacity: usize) -> (Producer<T>, Consumer<T>) {
+    let queue = Arc::new(ArrayQueue::new(capacity));
+    (Producer::new(queue.clone()), Consumer::new(queue))
+}
+
+
+pub struct WrappedSender<T: Sharable> {
     dest_id: usize,
     is_stopped: bool,
     backpressure_notify: Arc<Notify>,
-    sender: TokioSender<T>,
+    sender: TokioSender<DataWrapper<T>>,
     satiation_capacity: Arc<AtomicUsize>,
-    buffer_consumer: Consumer<DataBuffer<T, BuffSize>>,
+    buffer_consumer: Consumer<T>,
 }
 impl<T: Sharable> WrappedSender<T> {
     pub fn new(
-        sender: TokioSender<T>,
+        sender: TokioSender<DataWrapper<T>>,
         dest_id: usize,
         backpressure_notify: Arc<Notify>,
         satiation_capacity: Arc<AtomicUsize>,
+        buffer_consumer: Consumer<T>,
     ) -> Self {
         WrappedSender {
             sender,
@@ -31,9 +67,13 @@ impl<T: Sharable> WrappedSender<T> {
             dest_id,
             satiation_capacity,
             backpressure_notify,
+            buffer_consumer,
         }
     }
-    pub async fn send(&mut self, data: T) -> Result<(), TokioSendError<T>> {
+    async fn send(
+        &mut self,
+        data: DataWrapper<T>,
+    ) -> Result<(), TokioSendError<DataWrapper<T>>> {
         select! {
             output = self.sender.send(data) => { output },
             _ = self.backpressure_notify.notified() => {
@@ -41,6 +81,27 @@ impl<T: Sharable> WrappedSender<T> {
                 Ok(())
             }
         }
+    }
+    
+    pub fn consume_buffer(&mut self) -> DataWrapper<T> {
+        self.buffer_consumer.try_pop().unwrap_or_else(|| {
+            warn!("Plumbing issue! Buffer is empty!");
+            DataWrapper::new()
+        })
+    }
+    
+    pub async fn send_copy(&mut self, input_data: &mut DataWrapper<T>) -> Result<(), TokioSendError<DataWrapper<T>>> {
+        let mut output_buffer = self.consume_buffer();
+        input_data.copy_to(&mut output_buffer);
+        
+        self.send(output_buffer).await
+    }
+    
+    pub async fn send_swap(&mut self, input_data: &mut DataWrapper<T>) -> Result<(), TokioSendError<DataWrapper<T>>> {
+        let mut output_buffer = self.consume_buffer();
+        input_data.swap_st(&mut output_buffer);
+        
+        self.send(output_buffer).await
     }
 
     pub fn is_stopped(&self) -> bool {
@@ -65,49 +126,55 @@ impl<T: Sharable> WrappedSender<T> {
     }
 }
 
+
 pub async fn iterative_send<T: Sharable, const N: usize>(
     senders: &mut [WrappedSender<T>; N],
-    data: T,
-) -> Result<Vec<usize>, TokioSendError<T>> {
-    let mut satiated_edges: Vec<usize> = Vec::new();
+    satiated_edges: &mut [usize; N],
+    data: &mut DataWrapper<T>,
+) -> Result<usize, TokioSendError<DataWrapper<T>>> {
+    let mut num_satiated = 0;
     for sender_idx in 0..senders.len() - 1 {
         let sender = &mut senders[sender_idx];
 
-        match sender.send(data.clone()).await {
+        match sender.send_copy(data).await {
             Ok(()) => {
                 if sender.channel_satiated() {
-                    satiated_edges.push(*sender.get_dest_id())
+                    satiated_edges[sender_idx] = *sender.get_dest_id();
+                    num_satiated += 1;
                 }
             }
             Err(err) => return Err(err),
         }
     }
-    let last_sender = &mut senders[senders.len() - 1];
-    match last_sender.send(data).await {
+    let last_index = senders.len() - 1;
+    let last_sender = &mut senders[last_index];
+    match last_sender.send_swap(data).await {
         Ok(()) => {
             if last_sender.channel_satiated() {
-                satiated_edges.push(*last_sender.get_dest_id())
+                satiated_edges[last_index] = *last_sender.get_dest_id();
+                num_satiated += 1;
             }
         }
         Err(err) => return Err(err),
     }
-    Ok(satiated_edges)
+    Ok(num_satiated)
 }
 
-#[derive(Debug)]
 pub struct WrappedReceiver<T: Sharable> {
     source_id: usize,
     is_stopped: bool,
-    receiver: TokioReceiver<T>,
+    receiver: TokioReceiver<DataWrapper<T>>,
     backpressure_notify: Arc<Notify>,
     satiation_capacity: Arc<AtomicUsize>,
+    buffer_producer: Producer<T>,
 }
 impl<T: Sharable> WrappedReceiver<T> {
     pub fn new(
-        receiver: TokioReceiver<T>,
+        receiver: TokioReceiver<DataWrapper<T>>,
         source_id: usize,
         backpressure_notify: Arc<Notify>,
         satiation_capacity: Arc<AtomicUsize>,
+        buffer_producer: Producer<T>,
     ) -> Self {
         WrappedReceiver {
             source_id,
@@ -115,14 +182,25 @@ impl<T: Sharable> WrappedReceiver<T> {
             receiver,
             satiation_capacity,
             backpressure_notify,
+            buffer_producer,
         }
     }
 
-    pub fn recv(&mut self) -> Option<T> {
-        self.receiver.blocking_recv()
+    pub fn recv(&mut self) -> Option<DataWrapper<T>> {
+        let res = self.receiver.blocking_recv();
+        res
+    }
+    
+    pub fn refill_buffer(&mut self, data: DataWrapper<T>) {
+        match self.buffer_producer.try_push(data) {
+            Some(_) => (),
+            None => {
+                warn!("Plumbing issue! Buffer is full!");
+            }
+        }
     }
 
-    pub async fn recv_async(&mut self) -> Option<T> {
+    pub async fn recv_async(&mut self) -> Option<DataWrapper<T>> {
         self.receiver.recv().await
     }
 
@@ -164,14 +242,31 @@ pub fn channel_wrapped<T: Sharable>(
     let (sender, receiver) = tokio::sync::mpsc::channel(buffer_size);
     let backpressure_notify = Arc::new(Notify::new());
     let satiation_capacity: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(1));
+
+    // in order to guarantee that the buffer consumer in the channel sender doesnt have a non-async block
+    // we need an extra element to the buffer (2 to be safe). Why? Because if the buffer is full with buffer_size
+    // num elements, the sender yields to the runtime. If the consumer tries to pop from data manager with too few DataManager objects, then it waits on block without yield. Destroys system asynchronicity.
+    let (mut channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(buffer_size + 2);
+
+    for _ in 0..buffer_size + 2 {
+        let _ = channel_wrapped_producer.try_push(DataWrapper::new());
+    }
+
     (
         WrappedSender::new(
             sender,
             dest_id,
             backpressure_notify.clone(),
             satiation_capacity.clone(),
+            channel_wrapped_consumer,
         ),
-        WrappedReceiver::new(receiver, source_id, backpressure_notify, satiation_capacity),
+        WrappedReceiver::new(
+            receiver,
+            source_id,
+            backpressure_notify,
+            satiation_capacity,
+            channel_wrapped_producer,
+        ),
     )
 }
 

@@ -2,7 +2,7 @@ use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedS
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
-#[derive(Debug)]
+
 pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<Vec<I>>,
