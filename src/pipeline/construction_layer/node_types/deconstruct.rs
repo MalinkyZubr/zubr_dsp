@@ -1,41 +1,51 @@
-use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::comms_core::{iterative_send, WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
 
-pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize> {
+pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize, const ND: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
-    input: WrappedReceiver<Vec<I>>,
+    input: WrappedReceiver<BufferArray<I, ND>>,
     output: [WrappedSender<I>; NO],
+    satiated_edges: [usize; NO],
+    buffered_input: [DataWrapper<I>; ND]
 }
 
-impl<I: Sharable, const NO: usize> PipelineSeriesDeconstructor<I, NO> {
-    pub fn new(input: WrappedReceiver<Vec<I>>, output: [WrappedSender<I>; NO]) -> Self {
-        PipelineSeriesDeconstructor { input, output }
+impl<I: Sharable, const NO: usize, const ND: usize> PipelineSeriesDeconstructor<I, NO, ND> {
+    pub fn new(input: WrappedReceiver<BufferArray<I, ND>>, output: [WrappedSender<I>; NO]) -> Self {
+        PipelineSeriesDeconstructor { input, output, satiated_edges: [0;NO], buffered_input: [DataWrapper::new(); ND] }
     }
 }
 
 #[async_trait::async_trait]
-impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesDeconstructor<I, NO> {
-    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
-        let received = self.input.recv_async().await.unwrap();
-        for item in received {
-            for sender in self.output.iter_mut() {
-                match sender.send(item.clone()).await {
-                    Ok(_) => (),
-                    Err(_) => return None,
-                }
+impl<I: Sharable, const NO: usize, const ND: usize> CollectibleNode for PipelineSeriesDeconstructor<I, NO, ND> {
+    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+        let mut received = self.input.recv_async().await.unwrap();
+        let mut num_received = 0;
+        
+        for (idx, item) in received.read().read_mut().iter_mut().enumerate() {
+            self.buffered_input[idx].swap(item);
+            num_received = match iterative_send(
+                &mut self.output, &mut self.satiated_edges, &mut self.buffered_input[idx]
+            ).await.ok() {
+                Some(num) => num,
+                None => {self.input.refill_buffer(received); return None},
             }
         }
+        
+        self.input.refill_buffer(received); // give the received value back to the buffer holder
 
-        let mut satiated_edges: Vec<usize> = Vec::new();
-        for sender in self.output.iter_mut() {
-            if sender.channel_satiated() {
-                satiated_edges.push(*sender.get_dest_id());
-            }
+        Some(num_received)
+    }
+
+    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
+        if edge_index < NO {
+            Some(self.satiated_edges[edge_index])
         }
-
-        Some(satiated_edges)
+        else {
+            None
+        }
     }
     fn load_initial_state(&mut self) {
         panic!("Series deconstructor should not have initial state")

@@ -1,69 +1,75 @@
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::collections::HashSet;
+use std::mem;
 
-#[derive(Debug)]
-pub struct PipelineInterleavedSeparator<I: Sharable, const NUM_CHANNELS: usize> {
+pub struct PipelineInterleavedSeparator<
+    I: Sharable,
+    const NUM_CHANNELS: usize,
+    const BUFFER_SIZE: usize,
+> where
+    [(); BUFFER_SIZE % NUM_CHANNELS]: Sized,
+    [(); BUFFER_SIZE / NUM_CHANNELS]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
+{
     // need to have a builder struct that wraps in identification info to make the graph after
-    input: WrappedReceiver<Vec<I>>,
-    output: [WrappedSender<Vec<I>>; NUM_CHANNELS],
-    buffered_data: Option<[Vec<I>; NUM_CHANNELS]>,
+    input: WrappedReceiver<BufferArray<I, BUFFER_SIZE>>,
+    output: [WrappedSender<BufferArray<I, { BUFFER_SIZE / NUM_CHANNELS }>>; NUM_CHANNELS],
+    buffered_data: [DataWrapper<BufferArray<I, { BUFFER_SIZE / NUM_CHANNELS }>>; NUM_CHANNELS],
+    satiated_edges: [usize; NUM_CHANNELS],
+    output_ready: bool,
 }
 
-impl<I: Sharable, const NUM_CHANNELS: usize> PipelineInterleavedSeparator<I, NUM_CHANNELS> {
+impl<I: Sharable, const NUM_CHANNELS: usize, const BUFFER_SIZE: usize> PipelineInterleavedSeparator<I, NUM_CHANNELS, BUFFER_SIZE> 
+where
+    [(); BUFFER_SIZE % NUM_CHANNELS]: Sized,
+    [(); BUFFER_SIZE / NUM_CHANNELS]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
+{
     pub fn new(
-        input: WrappedReceiver<Vec<I>>,
-        output: [WrappedSender<Vec<I>>; NUM_CHANNELS],
-    ) -> PipelineInterleavedSeparator<I, NUM_CHANNELS> {
+        input: WrappedReceiver<BufferArray<I, BUFFER_SIZE>>,
+        output: [WrappedSender<BufferArray<I, { BUFFER_SIZE / NUM_CHANNELS }>>; NUM_CHANNELS],
+    ) -> PipelineInterleavedSeparator<I, NUM_CHANNELS, BUFFER_SIZE> {
         PipelineInterleavedSeparator {
             input,
             output,
-            buffered_data: None,
+            buffered_data: [Default::default(); NUM_CHANNELS],
+            satiated_edges: [0; NUM_CHANNELS],
+            output_ready: false,
         }
     }
 }
 
 #[async_trait::async_trait]
-impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
-    for PipelineInterleavedSeparator<I, NUM_CHANNELS>
+impl<I: Sharable, const NUM_CHANNELS: usize, const BUFFER_SIZE: usize> CollectibleNode
+    for PipelineInterleavedSeparator<I, NUM_CHANNELS, BUFFER_SIZE>
+where
+    [(); BUFFER_SIZE % NUM_CHANNELS]: Sized,
+    [(); BUFFER_SIZE / NUM_CHANNELS]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
-    fn is_ready_exec(&self) -> bool {
-        self.input.channel_satiated()
-    }
-    fn get_successors(&self) -> Vec<usize> {
-        self.output.iter().map(|x| *x.get_dest_id()).collect()
-    }
-    fn get_run_model(&self) -> RunModel {
-        match &self.buffered_data {
-            Some(_) => RunModel::Communicator,
-            None => RunModel::CPU,
-        }
-    }
-    fn get_num_inputs(&self) -> usize {
-        1
-    }
-    fn get_num_outputs(&self) -> usize {
-        NUM_CHANNELS
-    }
-    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
-        // very inefficient function. Optimize later
-        match self.buffered_data.take() {
-            Some(data) => {
-                let mut satiated_edges: HashSet<usize> = HashSet::new();
-                for (index, val) in data.into_iter().enumerate() {
-                    let sender = &mut self.output[index];
-                    match sender.send(val).await {
-                        Ok(_) => (),
-                        Err(_) => return None,
-                    }
-                    if sender.channel_satiated() {
-                        satiated_edges.insert(*sender.get_dest_id());
-                    }
-                }
-                Some(satiated_edges.into_iter().collect())
+    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+        let mut num_satiated_edges = 0;
+        for (idx, data) in self.buffered_data.iter_mut().enumerate() {
+            let res = self.output[idx].send_swap(data).await;
+            
+            if res.is_err() { // need better error handling here
+                return None;
             }
-            _ => None,
+            if self.output[idx].channel_satiated() {
+                self.satiated_edges[num_satiated_edges] = *self.output[idx].get_dest_id();
+                num_satiated_edges += 1;
+            }
+        }
+        
+        self.output_ready = false;
+        Some(num_satiated_edges)
+    }
+    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
+        if edge_index < NUM_CHANNELS {
+            Some(self.satiated_edges[edge_index])
+        }
+        else {
+            None
         }
     }
     fn load_initial_state(&mut self) {
@@ -72,18 +78,38 @@ impl<I: Sharable, const NUM_CHANNELS: usize> CollectibleNode
     fn has_initial_state(&self) -> bool {
         false
     }
+    fn get_num_inputs(&self) -> usize {
+        1
+    }
+    fn get_num_outputs(&self) -> usize {
+        NUM_CHANNELS
+    }
+    fn is_ready_exec(&self) -> bool {
+        self.input.channel_satiated()
+    }
+    fn get_successors(&self) -> Vec<usize> {
+        self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
+    fn get_run_model(&self) -> RunModel {
+        if self.output_ready {
+            RunModel::Communicator
+        }
+        else {
+            RunModel::CPU
+        }
+    }
 
     fn call_thread_cpu(&mut self, _id: usize) {
-        let input: Vec<I> = self.input.recv().unwrap();
-        let mut output_values: [Vec<I>; NUM_CHANNELS] =
-            vec![Vec::new(); NUM_CHANNELS].try_into().unwrap();
-
-        let mut current_channel: usize = 0;
-        for value in input {
-            output_values[current_channel].push(value);
-            current_channel = (current_channel + 1) % NUM_CHANNELS;
+        let mut input = self.input.recv().unwrap();
+        
+        for (idx, value) in input.read().read_mut().iter_mut().enumerate() {
+            let channel_unit = &mut self.buffered_data[idx % NUM_CHANNELS];
+            mem::swap(&mut channel_unit.read().read_mut()[idx], value);
         }
-        self.buffered_data = Some(output_values);
+        
+        self.input.refill_buffer(input);
+        
+        self.output_ready = true;
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::data_management::BufferArray;
 use crate::pipeline::construction_layer::node_types::deconstruct::PipelineSeriesDeconstructor;
 use crate::pipeline::construction_layer::node_types::interleaving::PipelineInterleavedSeparator;
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
@@ -177,8 +178,17 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
     }
 }
 
-impl<T: Sharable, const NO: usize>
-    BuildingNode<Vec<T>, Vec<T>, 1, NO, { IntoWhat::InterleaverNode }>
+impl<T: Sharable, const NO: usize, const BS: usize>
+    BuildingNode<
+        BufferArray<T, BS>,
+        BufferArray<T, { BS / NO }>,
+        1,
+        NO,
+        { IntoWhat::InterleaverNode },
+    >
+where
+    [(); BS % NO]: Sized,
+    [(); BS / NO]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     fn into_interleaved_separator(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
@@ -187,10 +197,16 @@ impl<T: Sharable, const NO: usize>
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let interleaved_separator: PipelineInterleavedSeparator<T, NO> =
+        let interleaved_separator: PipelineInterleavedSeparator<T, NO, BS> =
             PipelineInterleavedSeparator::new(
                 self.inputs.remove(0),
-                self.outputs.try_into().unwrap(),
+                match self.outputs.try_into() {
+                    Ok(out) => out,
+                    Err(_) => panic!(
+                        "Incorrect number of outputs for BuildingNode ID {}",
+                        self.id
+                    ),
+                },
             );
 
         (self.id, self.name, Box::new(interleaved_separator))
@@ -203,7 +219,9 @@ impl<T: Sharable, const NO: usize>
         self.into_interleaved_separator()
     }
 }
-impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, T, 1, NO, { IntoWhat::DeconstructorNode }> {
+impl<T: Sharable, const NO: usize, const ND: usize>
+    BuildingNode<BufferArray<T, ND>, T, 1, NO, { IntoWhat::DeconstructorNode }>
+{
     fn into_series_deconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -211,10 +229,16 @@ impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, T, 1, NO, { IntoWhat::De
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let deconstructor_separator: PipelineSeriesDeconstructor<T, NO> =
+        let deconstructor_separator: PipelineSeriesDeconstructor<T, NO, ND> =
             PipelineSeriesDeconstructor::new(
                 self.inputs.remove(0),
-                self.outputs.try_into().unwrap(),
+                match self.outputs.try_into() {
+                    Ok(out) => out,
+                    Err(_) => panic!(
+                        "Incorrect number of outputs for BuildingNode ID {}",
+                        self.id
+                    ),
+                },
             );
 
         (self.id, self.name, Box::new(deconstructor_separator))
@@ -228,7 +252,9 @@ impl<T: Sharable, const NO: usize> BuildingNode<Vec<T>, T, 1, NO, { IntoWhat::De
     }
 }
 
-impl<T: Sharable, const NO: usize> BuildingNode<T, Vec<T>, 1, NO, { IntoWhat::ReconstructorNode }> {
+impl<T: Sharable, const NO: usize, const NR: usize>
+    BuildingNode<T, BufferArray<T, NR>, 1, NO, { IntoWhat::ReconstructorNode }>
+{
     fn into_series_reconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -236,10 +262,16 @@ impl<T: Sharable, const NO: usize> BuildingNode<T, Vec<T>, 1, NO, { IntoWhat::Re
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let reconstructor_separator: PipelineSeriesReconstructor<T, NO> =
+        let reconstructor_separator: PipelineSeriesReconstructor<T, NO, NR> =
             PipelineSeriesReconstructor::new(
                 self.inputs.remove(0),
-                self.outputs.try_into().unwrap(),
+                match self.outputs.try_into() {
+                    Ok(out) => out,
+                    Err(_) => panic!(
+                        "Incorrect number of outputs for BuildingNode ID {}",
+                        self.id
+                    ),
+                },
                 self.demanded_input_count,
             );
 

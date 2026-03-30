@@ -5,7 +5,7 @@ pub trait HasDefault {
     fn default() -> Self;
 }
 
-pub trait Sharable = Send + Sync + Debug + Clone + Copy + Default + 'static;
+pub trait Sharable = Send + Sync + Clone + Copy + Default + 'static;
 
 pub trait Source {}
 pub trait Sink {}

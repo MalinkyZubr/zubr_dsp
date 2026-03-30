@@ -195,11 +195,11 @@ impl ThreadPoolTopographical {
                 debug!(
                     "Node {} sender task completed, triggering {} successors",
                     id,
-                    successor_ids.len()
+                    successor_ids
                 );
-                for successor_id in successor_ids {
+                for successor_id in 0..successor_ids {
                     trace!("Triggering successor node {}", successor_id);
-                    Self::task_execute(downgraded.clone(), successor_id, async_handle);
+                    Self::task_execute(downgraded.clone(), node.check_nth_satiated_edge_id(successor_id).unwrap(), async_handle);
                 }
             }
             None => {

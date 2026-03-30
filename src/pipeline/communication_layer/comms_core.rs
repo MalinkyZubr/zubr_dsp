@@ -139,7 +139,7 @@ pub async fn iterative_send<T: Sharable, const N: usize>(
         match sender.send_copy(data).await {
             Ok(()) => {
                 if sender.channel_satiated() {
-                    satiated_edges[sender_idx] = *sender.get_dest_id();
+                    satiated_edges[num_satiated] = *sender.get_dest_id();
                     num_satiated += 1;
                 }
             }
@@ -294,11 +294,12 @@ mod tests {
 
     #[test]
     fn test_wrapped_sender_new() {
-        let (tx, _) = mpsc::channel::<i32>(10);
+        let (tx, _) = mpsc::channel::<DataWrapper<i32>>(10);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
+        let (mut channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(12);
 
-        let sender = WrappedSender::new(tx, 42, notify, capacity);
+        let sender = WrappedSender::new(tx, 42, notify, capacity, channel_wrapped_consumer);
 
         assert_eq!(*sender.get_dest_id(), 42);
         assert!(sender.is_stopped());
@@ -306,9 +307,11 @@ mod tests {
 
     #[test]
     fn test_wrapped_receiver_new() {
-        let (_, rx) = mpsc::channel::<i32>(10);
+        let (_, rx) = mpsc::channel::<DataWrapper<i32>>(10);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
+
+        let (mut channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(buffer_size + 2);
 
         let receiver = WrappedReceiver::new(rx, 24, notify, capacity);
 

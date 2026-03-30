@@ -1,33 +1,72 @@
 use crate::pipeline::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
+use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
-#[derive(Debug)]
-pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize> {
+
+pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize, const NR: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<I>,
-    output: [WrappedSender<Vec<I>>; NO],
+    output: [WrappedSender<BufferArray<I, NR>>; NO],
     receive_demands: usize,
+    satiated_edges: [usize; NO],
+    buffered_input: DataWrapper<BufferArray<I, NR>>,
 }
 
-impl<I: Sharable, const NO: usize> PipelineSeriesReconstructor<I, NO> {
+impl<I: Sharable, const NO: usize, const NR: usize> PipelineSeriesReconstructor<I, NO, NR> {
     pub fn new(
         input: WrappedReceiver<I>,
-        output: [WrappedSender<Vec<I>>; NO],
+        output: [WrappedSender<BufferArray<I, NR>>; NO],
         receive_demands: usize,
     ) -> Self {
         Self {
             input,
             output,
             receive_demands,
+            satiated_edges: [0; NO],
+            buffered_input: DataWrapper::new(),
         }
     }
 }
 
+
 #[async_trait::async_trait]
-impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstructor<I, NO> {
+impl<I: Sharable, const NO: usize, const NR: usize> CollectibleNode for PipelineSeriesReconstructor<I, NO, NR> {
+    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+        for idx in 0..self.receive_demands {
+            match self.input.recv_async().await {
+                Some(mut data) => {
+                    data.swap(&mut self.buffered_input.read().read_mut()[idx]);
+                    self.input.refill_buffer(data);
+                },
+                None => return None
+            }; // unwrap is okay because this assumes all predecessors are ready
+        }
+        
+        iterative_send(&mut self.output, &mut self.satiated_edges, &mut self.buffered_input).await.ok()
+    }
+    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
+        if edge_index < NO {
+            Some(self.satiated_edges[edge_index])
+        }
+        else {
+            None
+        }
+    }
+    fn load_initial_state(&mut self) {
+        panic!("Series reconstructor does not support initial state")
+    }
+    fn has_initial_state(&self) -> bool {
+        false
+    }
+    fn get_num_inputs(&self) -> usize {
+        1
+    }
+    fn get_num_outputs(&self) -> usize {
+        NO
+    }
     fn is_ready_exec(&self) -> bool {
         self.input.channel_satiated()
     }
@@ -36,26 +75,6 @@ impl<I: Sharable, const NO: usize> CollectibleNode for PipelineSeriesReconstruct
     }
     fn get_run_model(&self) -> RunModel {
         RunModel::Communicator
-    }
-    fn get_num_inputs(&self) -> usize {
-        1
-    }
-    fn get_num_outputs(&self) -> usize {
-        NO
-    }
-    async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
-        let mut results = vec![];
-        for _ in 0..self.receive_demands {
-            results.push(self.input.recv_async().await.unwrap()); // unwrap is okay because this assumes all predecessors are ready
-        }
-
-        iterative_send(&mut self.output, results).await.ok()
-    }
-    fn load_initial_state(&mut self) {
-        panic!("Series reconstructor does not support initial state")
-    }
-    fn has_initial_state(&self) -> bool {
-        false
     }
 }
 

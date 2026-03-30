@@ -7,18 +7,21 @@ use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
 use futures::future::join_all;
 use std::fmt::Debug;
-use std::array;
+use std::{array, mem};
 use crate::pipeline::communication_layer::data_management::DataWrapper;
 
 
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
-    // need to have a buuilder struct that wraps in identification info to make the graph after
+    step: Box<dyn PipelineStep<I, O, NI>>,
+    
     input: [WrappedReceiver<I>; NI],
     output: [WrappedSender<O>; NO],
     satiated_edges: [usize; NO],
-    step: Box<dyn PipelineStep<I, O, NI>>,
+    
     initial_state: Option<O>,
-    buffered_data: DataWrapper<O>,
+    buffered_output: DataWrapper<O>,
+    buffered_input: [DataWrapper<I>; NI],
+    
     output_ready: bool,
     run_model: RunModel,
 }
@@ -40,8 +43,8 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
             NO,
             "Number of outputs must match the number of outputs in the step"
         );
-        let input: [WrappedReceiver<I>; NI] = input.try_into().unwrap();
-        let output: [WrappedSender<O>; NO] = output.try_into().unwrap();
+        let input: [WrappedReceiver<I>; NI] = match input.try_into() {Ok(val) => val, Err(_) => panic!("Input type mismatch")};
+        let output: [WrappedSender<O>; NO] = match output.try_into() {Ok(val) => val, Err(_) => panic!("Input type mismatch")};
 
         match run_model.clone() {
             RunModel::Communicator => panic!("A node cannot use the communicator compute model"),
@@ -56,47 +59,41 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
             input,
             output,
             step,
-            buffered_data,
+            buffered_output: buffered_data,
             initial_state,
             satiated_edges: [0; NO],
+            buffered_input: [DataWrapper::new(); NI],
             output_ready,
             run_model,
         }
     }
 
-    fn receive_input(&mut self) -> [DataWrapper<I>; NI] {
-        let input: [DataWrapper<I>; NI] = std::array::from_fn(|i| {
-            self.input[i].recv().unwrap() // error handling later when get work
-        });
-        input
-    }
-
-    async fn receive_input_async(&mut self) -> [DataWrapper<I>; NI] {
-        let mut received = [None; NI];
-        
+    fn receive_input(&mut self) -> Result<(), ()> {
         for (idx, receiver) in self.input.iter_mut().enumerate() {
-            received[idx] = Some(receiver.recv_async().await);
+            let data = receiver.recv();
+            if data.is_none() {
+                return Err(())
+            }
+            let mut data_wrapper = data.unwrap();
+            mem::swap(&mut self.buffered_input[idx], &mut data_wrapper);
+            receiver.refill_buffer(data_wrapper);
         }
-        
-        received.into_iter().map(|x| x.expect("unexpected none")).collect()
+
+        Ok(())
     }
 
-    fn execute_pipeline_step(&mut self, mut input_data: [DataWrapper<I>; NI]) -> Result<(), ()> {
-        let res = self.step.run_cpu(&mut input_data, &mut self.buffered_data);
-        for (receiver, data_wrapper) in self.input.iter_mut().zip(input_data) {
+    async fn receive_input_async(&mut self) -> Result<(), ()> {
+        for (idx, receiver) in self.input.iter_mut().enumerate() {
+            let data = receiver.recv_async().await;
+            if data.is_none() {
+                return Err(())
+            }
+            let mut data_wrapper = data.unwrap();
+            mem::swap(&mut self.buffered_input[idx], &mut data_wrapper);
             receiver.refill_buffer(data_wrapper);
         }
         
-        res
-    }
-
-    async fn execute_pipeline_step_io(&mut self, mut input_data: [DataWrapper<I>; NI]) -> Result<(), ()> {
-        let res = self.step.run_io(&mut input_data, &mut self.buffered_data).await;
-        for (receiver, data_wrapper) in self.input.iter_mut().zip(input_data) {
-            receiver.refill_buffer(data_wrapper);
-        }
-        
-        res
+        Ok(())
     }
 }
 
@@ -106,7 +103,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
 {
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
         if self.output_ready {
-            iterative_send(&mut self.output, &mut self.satiated_edges, &mut self.buffered_data).await.ok()
+            iterative_send(&mut self.output, &mut self.satiated_edges, &mut self.buffered_output).await.ok()
         }
         else {
             None
@@ -122,7 +119,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     }
     fn load_initial_state(&mut self) {
         match self.initial_state.clone() {
-            Some(val) => self.buffered_data = DataWrapper::new_with_value(val),
+            Some(val) => self.buffered_output = DataWrapper::new_with_value(val),
             None => ()
         }
     }
@@ -154,15 +151,15 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     }
 
     fn call_thread_cpu(&mut self, _id: usize) {
-        let received_data: [DataWrapper<I>; NI] = self.receive_input();
-        let compute_result = self.execute_pipeline_step(received_data);
+        let _ = self.receive_input();
+        let compute_result = self.step.run_cpu(&mut self.buffered_input, &mut self.buffered_output);;
 
         self.output_ready = compute_result.is_ok() && !self.is_sink();
     }
 
     async fn call_thread_io(&mut self, _id: usize) {
-        let received_data: [DataWrapper<I>; NI] = self.receive_input_async().await;
-        let compute_result = self.execute_pipeline_step_io(received_data).await;
+        let _ = self.receive_input_async().await;
+        let compute_result = self.step.run_io(&mut self.buffered_input, &mut self.buffered_output).await;
 
         self.output_ready = compute_result.is_ok() && !self.is_sink();
     }
