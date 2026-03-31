@@ -10,7 +10,6 @@ use tokio::sync::mpsc::{
 use tokio::sync::Notify;
 use tracing::warn;
 
-
 pub struct Consumer<T: Sharable> {
     queue: Arc<ArrayQueue<DataWrapper<T>>>,
 }
@@ -18,12 +17,11 @@ impl<T: Sharable> Consumer<T> {
     fn new(queue: Arc<ArrayQueue<DataWrapper<T>>>) -> Self {
         Consumer { queue }
     }
-    
+
     fn try_pop(&mut self) -> Option<DataWrapper<T>> {
         self.queue.pop()
     }
 }
-
 
 pub struct Producer<T: Sharable> {
     queue: Arc<ArrayQueue<DataWrapper<T>>>,
@@ -32,18 +30,18 @@ impl<T: Sharable> Producer<T> {
     fn new(queue: Arc<ArrayQueue<DataWrapper<T>>>) -> Self {
         Producer { queue }
     }
-    
+
     fn try_push(&mut self, data: DataWrapper<T>) -> Option<()> {
         self.queue.push(data).ok()
     }
 }
 
-
-pub(crate) fn make_crossbeam_queue_handles<T: Sharable>(capacity: usize) -> (Producer<T>, Consumer<T>) {
+pub(crate) fn make_crossbeam_queue_handles<T: Sharable>(
+    capacity: usize,
+) -> (Producer<T>, Consumer<T>) {
     let queue = Arc::new(ArrayQueue::new(capacity));
     (Producer::new(queue.clone()), Consumer::new(queue))
 }
-
 
 pub struct WrappedSender<T: Sharable> {
     dest_id: usize,
@@ -70,10 +68,7 @@ impl<T: Sharable> WrappedSender<T> {
             buffer_consumer,
         }
     }
-    async fn send(
-        &mut self,
-        data: DataWrapper<T>,
-    ) -> Result<(), TokioSendError<DataWrapper<T>>> {
+    async fn send(&mut self, data: DataWrapper<T>) -> Result<(), TokioSendError<DataWrapper<T>>> {
         select! {
             output = self.sender.send(data) => { output },
             _ = self.backpressure_notify.notified() => {
@@ -82,25 +77,31 @@ impl<T: Sharable> WrappedSender<T> {
             }
         }
     }
-    
+
     pub fn consume_buffer(&mut self) -> DataWrapper<T> {
         self.buffer_consumer.try_pop().unwrap_or_else(|| {
             warn!("Plumbing issue! Buffer is empty!");
             DataWrapper::new()
         })
     }
-    
-    pub async fn send_copy(&mut self, input_data: &mut DataWrapper<T>) -> Result<(), TokioSendError<DataWrapper<T>>> {
+
+    pub async fn send_copy(
+        &mut self,
+        input_data: &mut DataWrapper<T>,
+    ) -> Result<(), TokioSendError<DataWrapper<T>>> {
         let mut output_buffer = self.consume_buffer();
         input_data.copy_to(&mut output_buffer);
-        
+
         self.send(output_buffer).await
     }
-    
-    pub async fn send_swap(&mut self, input_data: &mut DataWrapper<T>) -> Result<(), TokioSendError<DataWrapper<T>>> {
+
+    pub async fn send_swap(
+        &mut self,
+        input_data: &mut DataWrapper<T>,
+    ) -> Result<(), TokioSendError<DataWrapper<T>>> {
         let mut output_buffer = self.consume_buffer();
         input_data.swap_st(&mut output_buffer);
-        
+
         self.send(output_buffer).await
     }
 
@@ -125,7 +126,6 @@ impl<T: Sharable> WrappedSender<T> {
         &self.dest_id
     }
 }
-
 
 pub async fn iterative_send<T: Sharable, const N: usize>(
     senders: &mut [WrappedSender<T>; N],
@@ -190,7 +190,7 @@ impl<T: Sharable> WrappedReceiver<T> {
         let res = self.receiver.blocking_recv();
         res
     }
-    
+
     pub fn refill_buffer(&mut self, data: DataWrapper<T>) {
         match self.buffer_producer.try_push(data) {
             Some(_) => (),
@@ -246,7 +246,8 @@ pub fn channel_wrapped<T: Sharable>(
     // in order to guarantee that the buffer consumer in the channel sender doesnt have a non-async block
     // we need an extra element to the buffer (2 to be safe). Why? Because if the buffer is full with buffer_size
     // num elements, the sender yields to the runtime. If the consumer tries to pop from data manager with too few DataManager objects, then it waits on block without yield. Destroys system asynchronicity.
-    let (mut channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(buffer_size + 2);
+    let (mut channel_wrapped_producer, channel_wrapped_consumer) =
+        make_crossbeam_queue_handles(buffer_size + 2);
 
     for _ in 0..buffer_size + 2 {
         let _ = channel_wrapped_producer.try_push(DataWrapper::new());
@@ -297,7 +298,8 @@ mod tests {
         let (tx, _) = mpsc::channel::<DataWrapper<i32>>(10);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
-        let (_channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(12);
+        let (_channel_wrapped_producer, channel_wrapped_consumer) =
+            make_crossbeam_queue_handles(12);
 
         let sender = WrappedSender::new(tx, 42, notify, capacity, channel_wrapped_consumer);
 
@@ -311,7 +313,8 @@ mod tests {
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
 
-        let (channel_wrapped_producer, _channel_wrapped_consumer) = make_crossbeam_queue_handles(12);
+        let (channel_wrapped_producer, _channel_wrapped_consumer) =
+            make_crossbeam_queue_handles(12);
 
         let receiver = WrappedReceiver::new(rx, 24, notify, capacity, channel_wrapped_producer);
 
@@ -324,7 +327,9 @@ mod tests {
         let (mut sender, mut receiver) = channel_wrapped(10, 0, 1);
 
         let test_data = 42;
-        let result = sender.send(DataWrapper::new_with_value(test_data.clone())).await;
+        let result = sender
+            .send(DataWrapper::new_with_value(test_data.clone()))
+            .await;
 
         assert!(result.is_ok());
 
@@ -408,7 +413,12 @@ mod tests {
 
         let test_data = 999;
         let mut satiated_edges = [0; 2];
-        let result = iterative_send(&mut senders, &mut satiated_edges, &mut DataWrapper::new_with_value(test_data.clone())).await;
+        let result = iterative_send(
+            &mut senders,
+            &mut satiated_edges,
+            &mut DataWrapper::new_with_value(test_data.clone()),
+        )
+        .await;
 
         assert!(result.is_ok());
 

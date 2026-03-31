@@ -9,8 +9,8 @@ use crate::pipeline::orchestration_layer::logging::init_stdout_logger;
 use log::Level;
 use std::sync::Once;
 
-pub mod pipeline;
 pub mod dsp;
+pub mod pipeline;
 
 static INIT: Once = Once::new();
 

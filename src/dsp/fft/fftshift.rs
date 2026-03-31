@@ -1,11 +1,12 @@
 use std::mem;
 
-
 pub fn fft_shift<T>(buffer: &mut Vec<T>) {
     let length = buffer.len();
     let (positive_frequencies, negative_frequencies) = buffer.split_at_mut(length / 2);
-    
-    for (positive_frequency, negative_frequency) in positive_frequencies.iter_mut().zip(negative_frequencies) {
+
+    for (positive_frequency, negative_frequency) in
+        positive_frequencies.iter_mut().zip(negative_frequencies)
+    {
         mem::swap(positive_frequency, negative_frequency);
     }
 }

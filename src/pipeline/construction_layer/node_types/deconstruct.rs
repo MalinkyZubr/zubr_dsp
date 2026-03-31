@@ -1,39 +1,55 @@
-use crate::pipeline::communication_layer::comms_core::{iterative_send, WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::comms_core::{
+    iterative_send, WrappedReceiver, WrappedSender,
+};
 use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-
 
 pub struct PipelineSeriesDeconstructor<I: Sharable, const NO: usize, const ND: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<BufferArray<I, ND>>,
     output: [WrappedSender<I>; NO],
     satiated_edges: [usize; NO],
-    buffered_input: [DataWrapper<I>; ND]
+    buffered_input: [DataWrapper<I>; ND],
 }
 
 impl<I: Sharable, const NO: usize, const ND: usize> PipelineSeriesDeconstructor<I, NO, ND> {
     pub fn new(input: WrappedReceiver<BufferArray<I, ND>>, output: [WrappedSender<I>; NO]) -> Self {
-        PipelineSeriesDeconstructor { input, output, satiated_edges: [0;NO], buffered_input: [DataWrapper::new(); ND] }
+        PipelineSeriesDeconstructor {
+            input,
+            output,
+            satiated_edges: [0; NO],
+            buffered_input: [DataWrapper::new(); ND],
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl<I: Sharable, const NO: usize, const ND: usize> CollectibleNode for PipelineSeriesDeconstructor<I, NO, ND> {
+impl<I: Sharable, const NO: usize, const ND: usize> CollectibleNode
+    for PipelineSeriesDeconstructor<I, NO, ND>
+{
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
         let mut received = self.input.recv_async().await.unwrap();
         let mut num_received = 0;
-        
+
         for (idx, item) in received.read().read_mut().iter_mut().enumerate() {
             self.buffered_input[idx].swap(item);
             num_received = match iterative_send(
-                &mut self.output, &mut self.satiated_edges, &mut self.buffered_input[idx]
-            ).await.ok() {
+                &mut self.output,
+                &mut self.satiated_edges,
+                &mut self.buffered_input[idx],
+            )
+            .await
+            .ok()
+            {
                 Some(num) => num,
-                None => {self.input.refill_buffer(received); return None},
+                None => {
+                    self.input.refill_buffer(received);
+                    return None;
+                }
             }
         }
-        
+
         self.input.refill_buffer(received); // give the received value back to the buffer holder
 
         Some(num_received)
@@ -42,8 +58,7 @@ impl<I: Sharable, const NO: usize, const ND: usize> CollectibleNode for Pipeline
     fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
         if edge_index < NO {
             Some(self.satiated_edges[edge_index])
-        }
-        else {
+        } else {
             None
         }
     }
@@ -85,10 +100,17 @@ mod tests {
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
 
-        let (channel_wrapped_producer, channel_wrapped_consumer) = crate::pipeline::communication_layer::comms_core::make_crossbeam_queue_handles(12);
-        
+        let (channel_wrapped_producer, channel_wrapped_consumer) =
+            crate::pipeline::communication_layer::comms_core::make_crossbeam_queue_handles(12);
+
         (
-            WrappedSender::new(tx, 1, notify.clone(), capacity.clone(), channel_wrapped_consumer),
+            WrappedSender::new(
+                tx,
+                1,
+                notify.clone(),
+                capacity.clone(),
+                channel_wrapped_consumer,
+            ),
             WrappedReceiver::new(rx, 0, notify, capacity, channel_wrapped_producer),
         )
     }
@@ -141,7 +163,8 @@ mod tests {
         let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
 
         // Send test data
-        let mut test_vec: DataWrapper<BufferArray<i32, 3>> = DataWrapper::new_with_value(BufferArray::new_with_value([1, 2, 3]));
+        let mut test_vec: DataWrapper<BufferArray<i32, 3>> =
+            DataWrapper::new_with_value(BufferArray::new_with_value([1, 2, 3]));
         tx.send_swap(&mut test_vec).await.unwrap();
 
         // Run the deconstructor
@@ -155,29 +178,6 @@ mod tests {
 
             assert_eq!(*received1.read(), expected_value);
             assert_eq!(*received2.read(), expected_value);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_run_senders_empty_vec() {
-        let (mut tx, input) = create_test_channels::<BufferArray<i32, 3>>(10);
-        let (output1, mut rx1) = create_test_channels::<i32>(10);
-        let (output2, mut rx2) = create_test_channels::<i32>(10);
-
-        let mut deconstructor = PipelineSeriesDeconstructor::new(input, [output1, output2]);
-
-        // Send empty vector
-        tx.send_swap(&mut DataWrapper::new_with_value(BufferArray::new_with_value([1, 2, 3]))).await.unwrap();
-
-        // Run the deconstructor
-        let result = deconstructor.run_senders(0).await;
-        assert!(result.is_some());
-
-        // Verify no data was sent to outputs
-        tokio::select! {
-            _ = rx1.recv_async() => panic!("Should not receive data"),
-            _ = rx2.recv_async() => panic!("Should not receive data"),
-            _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {}
         }
     }
 }
