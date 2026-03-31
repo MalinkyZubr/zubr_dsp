@@ -11,7 +11,7 @@ use tokio::sync::Notify;
 use tracing::warn;
 
 
-struct Consumer<T: Sharable> {
+pub struct Consumer<T: Sharable> {
     queue: Arc<ArrayQueue<DataWrapper<T>>>,
 }
 impl<T: Sharable> Consumer<T> {
@@ -25,7 +25,7 @@ impl<T: Sharable> Consumer<T> {
 }
 
 
-struct Producer<T: Sharable> {
+pub struct Producer<T: Sharable> {
     queue: Arc<ArrayQueue<DataWrapper<T>>>,
 }
 impl<T: Sharable> Producer<T> {
@@ -39,7 +39,7 @@ impl<T: Sharable> Producer<T> {
 }
 
 
-fn make_crossbeam_queue_handles<T: Sharable>(capacity: usize) -> (Producer<T>, Consumer<T>) {
+pub(crate) fn make_crossbeam_queue_handles<T: Sharable>(capacity: usize) -> (Producer<T>, Consumer<T>) {
     let queue = Arc::new(ArrayQueue::new(capacity));
     (Producer::new(queue.clone()), Consumer::new(queue))
 }
@@ -297,7 +297,7 @@ mod tests {
         let (tx, _) = mpsc::channel::<DataWrapper<i32>>(10);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
-        let (mut channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(12);
+        let (_channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(12);
 
         let sender = WrappedSender::new(tx, 42, notify, capacity, channel_wrapped_consumer);
 
@@ -311,9 +311,9 @@ mod tests {
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
 
-        let (mut channel_wrapped_producer, channel_wrapped_consumer) = make_crossbeam_queue_handles(buffer_size + 2);
+        let (channel_wrapped_producer, _channel_wrapped_consumer) = make_crossbeam_queue_handles(12);
 
-        let receiver = WrappedReceiver::new(rx, 24, notify, capacity);
+        let receiver = WrappedReceiver::new(rx, 24, notify, capacity, channel_wrapped_producer);
 
         assert_eq!(receiver.source_id, 24);
         assert!(receiver.is_stopped());
@@ -324,12 +324,12 @@ mod tests {
         let (mut sender, mut receiver) = channel_wrapped(10, 0, 1);
 
         let test_data = 42;
-        let result = sender.send(test_data.clone()).await;
+        let result = sender.send(DataWrapper::new_with_value(test_data.clone())).await;
 
         assert!(result.is_ok());
 
-        let received = receiver.recv_async().await.unwrap();
-        assert_eq!(received, test_data);
+        let mut received = receiver.recv_async().await.unwrap();
+        assert_eq!(*received.read(), test_data);
     }
 
     #[test]
@@ -341,7 +341,7 @@ mod tests {
         // Send data using the runtime
         rt.spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
-            sender.send(123).await.unwrap();
+            sender.send(DataWrapper::new_with_value(123)).await.unwrap();
         });
 
         // Use the runtime to handle the blocking receive
@@ -356,7 +356,7 @@ mod tests {
         });
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().unwrap(), 123);
+        assert_eq!(*result.unwrap().unwrap().read(), 123);
     }
 
     #[test]
@@ -407,15 +407,16 @@ mod tests {
         let mut senders = [sender1, sender2];
 
         let test_data = 999;
-        let result = iterative_send(&mut senders, test_data.clone()).await;
+        let mut satiated_edges = [0; 2];
+        let result = iterative_send(&mut senders, &mut satiated_edges, &mut DataWrapper::new_with_value(test_data.clone())).await;
 
         assert!(result.is_ok());
 
-        let received1 = receiver1.recv_async().await.unwrap();
-        let received2 = receiver2.recv_async().await.unwrap();
+        let mut received1 = receiver1.recv_async().await.unwrap();
+        let mut received2 = receiver2.recv_async().await.unwrap();
 
-        assert_eq!(received1, test_data);
-        assert_eq!(received2, test_data);
+        assert_eq!(*received1.read(), test_data);
+        assert_eq!(*received2.read(), test_data);
     }
 
     #[test]

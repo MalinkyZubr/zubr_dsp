@@ -316,7 +316,7 @@ impl<T: Sharable, const NO: usize, const BS: usize>
     NodeBuilder<BufferArray<T, BS>, BufferArray<T, {BS / NO}>, 1, NO, { IntoWhat::InterleaverNode }>
 where
     [(); BS % NO]: Sized,
-    [(); BS / NO]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); BS / NO]: Sized, // the input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     pub fn submit_interleaved_separator(self) {
         self.build_vector

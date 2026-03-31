@@ -1,9 +1,4 @@
-use std::fmt::Debug;
-use std::ops::{Add, Div, Mul, Neg, Sub};
-
-pub trait HasDefault {
-    fn default() -> Self;
-}
+//use std::ops::{Add, Div, Mul, Neg, Sub};
 
 pub trait Sharable = Send + Sync + Clone + Copy + Default + 'static;
 
@@ -17,9 +12,4 @@ impl Unit for () {
     fn gen() -> Self {
         ()
     }
-}
-
-pub trait HasID {
-    fn get_id(&self) -> String;
-    fn set_id(&mut self, id: &str);
 }

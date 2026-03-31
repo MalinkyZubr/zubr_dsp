@@ -273,6 +273,9 @@ mod tests {
 
     #[async_trait::async_trait]
     impl CollectibleNode for MockNode {
+        fn check_nth_satiated_edge_id(&self, _edge_index: usize) -> Option<usize> {
+            Some(0)
+        }
         fn is_ready_exec(&self) -> bool {
             true
         }
@@ -290,8 +293,8 @@ mod tests {
         fn get_num_outputs(&self) -> usize {
             self.num_outputs
         }
-        async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
-            Some(vec![])
+        async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+            Some(0)
         }
         fn load_initial_state(&mut self) {}
         fn has_initial_state(&self) -> bool {

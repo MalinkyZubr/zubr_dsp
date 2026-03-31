@@ -93,17 +93,19 @@ mod tests {
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
 
+        let (channel_wrapped_producer, channel_wrapped_consumer) = crate::pipeline::communication_layer::comms_core::make_crossbeam_queue_handles(12);
+
         (
-            WrappedSender::new(tx, 1, notify.clone(), capacity.clone()),
-            WrappedReceiver::new(rx, 0, notify, capacity),
+            WrappedSender::new(tx, 1, notify.clone(), capacity.clone(), channel_wrapped_consumer),
+            WrappedReceiver::new(rx, 0, notify, capacity, channel_wrapped_producer),
         )
     }
 
     #[test]
     fn test_pipeline_series_reconstructor_new() {
         let (_, input) = create_test_channels::<i32>(10);
-        let (output1, _) = create_test_channels(10);
-        let (output2, _) = create_test_channels(10);
+        let (output1, _) = create_test_channels::<BufferArray<i32, 3>>(10);
+        let (output2, _) = create_test_channels::<BufferArray<i32, 3>>(10);
 
         let reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 3);
 
@@ -117,8 +119,8 @@ mod tests {
     #[test]
     fn test_get_successors() {
         let (_, input) = create_test_channels::<i32>(10);
-        let (output1, _) = create_test_channels(10);
-        let (output2, _) = create_test_channels(10);
+        let (output1, _) = create_test_channels::<BufferArray<i32, 3>>(10);
+        let (output2, _) = create_test_channels::<BufferArray<i32, 3>>(10);
 
         let reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 2);
 
@@ -131,8 +133,8 @@ mod tests {
     #[should_panic(expected = "Series reconstructor does not support initial state")]
     fn test_load_initial_state_panics() {
         let (_, input) = create_test_channels::<i32>(10);
-        let (output1, _) = create_test_channels(10);
-        let (output2, _) = create_test_channels(10);
+        let (output1, _) = create_test_channels::<BufferArray<i32, 3>>(10);
+        let (output2, _) = create_test_channels::<BufferArray<i32, 3>>(10);
 
         let mut reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 1);
 
@@ -148,18 +150,18 @@ mod tests {
         let mut reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 2);
 
         // Send test data
-        tx.send(1).await.unwrap();
-        tx.send(2).await.unwrap();
+        tx.send_swap(&mut DataWrapper::new_with_value(1)).await.unwrap();
+        tx.send_swap(&mut DataWrapper::new_with_value(2)).await.unwrap();
 
         // Run the reconstructor
         let result = reconstructor.run_senders(0).await;
         assert!(result.is_some());
 
         // Verify both outputs received the data
-        let received1 = rx1.recv_async().await.unwrap();
-        let received2 = rx2.recv_async().await.unwrap();
+        let mut received1 = rx1.recv_async().await.unwrap();
+        let mut received2 = rx2.recv_async().await.unwrap();
 
-        assert_eq!(received1, vec![1, 2]);
-        assert_eq!(received2, vec![1, 2]);
+        assert_eq!(*received1.read().read(), [1, 2]);
+        assert_eq!(*received2.read().read(), [1, 2]);
     }
 }
