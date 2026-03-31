@@ -1,21 +1,20 @@
-use log::info;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::thread::{JoinHandle, Thread, spawn as thread_spawn};
-use tokio::sync::oneshot::{Sender, Receiver, channel};
-use tokio::{runtime as TokioRuntime, select};
-use tokio::sync::watch::{Receiver as WatchReceiver, Sender as WatchSender, channel as watch_channel};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
-
+use log::info;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::thread::{spawn as thread_spawn, JoinHandle};
+use tokio::sync::watch::{
+    channel as watch_channel, Receiver as WatchReceiver, Sender as WatchSender,
+};
+use tokio::{select};
 
 #[derive(PartialEq, Clone, Copy)]
 enum ThreadOrder {
     Run,
     Stop,
-    Kill
+    Kill,
 }
-
 
 pub struct ThreadPoolPerNode {
     thread_pool: Vec<JoinHandle<()>>,
@@ -26,9 +25,9 @@ impl ThreadPoolPerNode {
     pub fn new(graph: Arc<PipelineGraph>) -> Self {
         info!("Creating ThreadPoolPerNode");
 
-        let mut mutable_states = graph.get_all_mutable_state();
+        let mutable_states = graph.get_all_mutable_state();
         let mut thread_handles = Vec::with_capacity(mutable_states.len());
-        let runflag = Arc::new(AtomicBool::new(false));
+        let _runflag = Arc::new(AtomicBool::new(false));
         let (run_sender, run_receiver) = watch_channel(ThreadOrder::Run);
 
         for (id, mutable_state) in mutable_states.into_iter().enumerate() {
@@ -39,13 +38,11 @@ impl ThreadPoolPerNode {
                     .build()
                     .unwrap();
 
-                rt.block_on(
-                    async move {
-                        Self::mutable_state_loop(mutable_state, id, receiver_clone).await;
-                    }
-                )
+                rt.block_on(async move {
+                    Self::mutable_state_loop(mutable_state, id, receiver_clone).await;
+                })
             }))
-        };
+        }
 
         Self {
             thread_pool: thread_handles,
@@ -54,7 +51,11 @@ impl ThreadPoolPerNode {
         }
     }
 
-    async fn mutable_state_loop(mut mutable_state: Box<dyn CollectibleNode>, id: usize, mut run_watcher: WatchReceiver<ThreadOrder>) {
+    async fn mutable_state_loop(
+        mut mutable_state: Box<dyn CollectibleNode>,
+        id: usize,
+        mut run_watcher: WatchReceiver<ThreadOrder>,
+    ) {
         let mut internal_state = ThreadOrder::Stop;
 
         while internal_state != ThreadOrder::Kill {
@@ -64,12 +65,14 @@ impl ThreadPoolPerNode {
                     mutable_state = tokio::task::spawn_blocking(move || {
                         mutable_state.call_thread_cpu(id_clone);
                         mutable_state
-                    }).await.unwrap();
+                    })
+                    .await
+                    .unwrap();
                 }
                 RunModel::IO => {
                     select! {
                         _ = mutable_state.call_thread_io(id) => {}
-                        new_internal_state = run_watcher.changed() => {
+                        _new_internal_state = run_watcher.changed() => {
                             internal_state = *run_watcher.borrow();
                         }
                     }
@@ -77,7 +80,7 @@ impl ThreadPoolPerNode {
                 RunModel::Communicator => {
                     select! {
                         _ = mutable_state.run_senders(id) => {}
-                        new_internal_state = run_watcher.changed() => {
+                        _new_internal_state = run_watcher.changed() => {
                             internal_state = *run_watcher.borrow();
                         }
                     }
@@ -94,7 +97,7 @@ impl ThreadPoolPerNode {
         self.run_watcher.send(ThreadOrder::Stop).unwrap();
     }
 
-    fn kill_threads(mut self) {
+    fn kill_threads(self) {
         self.run_watcher.send(ThreadOrder::Kill).unwrap();
 
         for thread in self.thread_pool {

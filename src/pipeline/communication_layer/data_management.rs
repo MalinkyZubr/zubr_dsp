@@ -56,6 +56,12 @@ impl<T: Sharable, const N: usize> BufferArray<T, N> {
         }
     }
     
+    pub fn new_with_value(value: [T; N]) -> Self {
+        BufferArray {
+            val: value
+        }
+    }
+    
     pub fn read_mut(&mut self) -> &mut [T; N] {
         &mut self.val
     }

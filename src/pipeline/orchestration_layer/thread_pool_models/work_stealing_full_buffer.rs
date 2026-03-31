@@ -432,6 +432,13 @@ mod tests {
 
     #[async_trait::async_trait]
     impl CollectibleNode for MockNode {
+        fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
+            if edge_index == 0 {
+                Some(0)
+            } else {
+                None
+            }
+        }
         fn is_ready_exec(&self) -> bool {
             self.ready
         }
@@ -450,9 +457,9 @@ mod tests {
         fn is_sink(&self) -> bool {
             self.is_sink
         }
-        async fn run_senders(&mut self, _id: usize) -> Option<Vec<usize>> {
+        async fn run_senders(&mut self, _id: usize) -> Option<usize> {
             self.execution_count.store(true, Ordering::Release);
-            Some(vec![])
+            Some(0)
         }
         fn load_initial_state(&mut self) {}
         fn has_initial_state(&self) -> bool {

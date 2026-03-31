@@ -1,14 +1,12 @@
 use crate::pipeline::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
+use crate::pipeline::communication_layer::data_management::DataWrapper;
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
-use futures::future::join_all;
-use std::fmt::Debug;
-use std::{array, mem};
-use crate::pipeline::communication_layer::data_management::DataWrapper;
+use std::mem;
 
 
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
@@ -152,7 +150,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
 
     fn call_thread_cpu(&mut self, _id: usize) {
         let _ = self.receive_input();
-        let compute_result = self.step.run_cpu(&mut self.buffered_input, &mut self.buffered_output);;
+        let compute_result = self.step.run_cpu(&mut self.buffered_input, &mut self.buffered_output);
 
         self.output_ready = compute_result.is_ok() && !self.is_sink();
     }

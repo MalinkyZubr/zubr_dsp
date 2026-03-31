@@ -1,5 +1,4 @@
 use std::mem;
-use num::Complex;
 
 
 pub fn fft_shift<T>(buffer: &mut Vec<T>) {
