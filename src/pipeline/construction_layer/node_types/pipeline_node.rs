@@ -11,15 +11,15 @@ use std::mem;
 
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     step: Box<dyn PipelineStep<I, O, NI>>,
-    
+
     input: [WrappedReceiver<I>; NI],
     output: [WrappedSender<O>; NO],
     satiated_edges: [usize; NO],
-    
+
     initial_state: Option<O>,
     buffered_output: DataWrapper<O>,
     buffered_input: [DataWrapper<I>; NI],
-    
+
     output_ready: bool,
     run_model: RunModel,
 }
@@ -41,17 +41,23 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
             NO,
             "Number of outputs must match the number of outputs in the step"
         );
-        let input: [WrappedReceiver<I>; NI] = match input.try_into() {Ok(val) => val, Err(_) => panic!("Input type mismatch")};
-        let output: [WrappedSender<O>; NO] = match output.try_into() {Ok(val) => val, Err(_) => panic!("Input type mismatch")};
+        let input: [WrappedReceiver<I>; NI] = match input.try_into() {
+            Ok(val) => val,
+            Err(_) => panic!("Input type mismatch"),
+        };
+        let output: [WrappedSender<O>; NO] = match output.try_into() {
+            Ok(val) => val,
+            Err(_) => panic!("Input type mismatch"),
+        };
 
         match run_model.clone() {
             RunModel::Communicator => panic!("A node cannot use the communicator compute model"),
             _ => (),
         };
-        
+
         let (output_ready, buffered_data) = match initial_state.clone() {
             Some(val) => (true, DataWrapper::new_with_value(val)),
-            None => (false, DataWrapper::new())
+            None => (false, DataWrapper::new()),
         };
         PipelineNode {
             input,
@@ -70,7 +76,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
         for (idx, receiver) in self.input.iter_mut().enumerate() {
             let data = receiver.recv();
             if data.is_none() {
-                return Err(())
+                return Err(());
             }
             let mut data_wrapper = data.unwrap();
             mem::swap(&mut self.buffered_input[idx], &mut data_wrapper);
@@ -84,13 +90,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineNode<I,
         for (idx, receiver) in self.input.iter_mut().enumerate() {
             let data = receiver.recv_async().await;
             if data.is_none() {
-                return Err(())
+                return Err(());
             }
             let mut data_wrapper = data.unwrap();
             mem::swap(&mut self.buffered_input[idx], &mut data_wrapper);
             receiver.refill_buffer(data_wrapper);
         }
-        
+
         Ok(())
     }
 }
@@ -100,25 +106,32 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     for PipelineNode<I, O, NI, NO>
 {
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+        let result;
         if self.output_ready {
-            iterative_send(&mut self.output, &mut self.satiated_edges, &mut self.buffered_output).await.ok()
+            result = iterative_send(
+                &mut self.output,
+                &mut self.satiated_edges,
+                &mut self.buffered_output,
+            )
+            .await
+            .ok()
+        } else {
+            result = None
         }
-        else {
-            None
-        }
+        self.output_ready = false;
+        result
     }
     fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
         if edge_index < NO {
             Some(self.satiated_edges[edge_index])
-        }
-        else {
+        } else {
             None
         }
     }
     fn load_initial_state(&mut self) {
         match self.initial_state.clone() {
             Some(val) => self.buffered_output = DataWrapper::new_with_value(val),
-            None => ()
+            None => (),
         }
     }
     fn has_initial_state(&self) -> bool {
@@ -142,22 +155,26 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     fn get_run_model(&self) -> RunModel {
         if self.output_ready {
             RunModel::Communicator
-        }
-        else {
+        } else {
             self.run_model
         }
     }
 
     fn call_thread_cpu(&mut self, _id: usize) {
         let _ = self.receive_input();
-        let compute_result = self.step.run_cpu(&mut self.buffered_input, &mut self.buffered_output);
+        let compute_result = self
+            .step
+            .run_cpu(&mut self.buffered_input, &mut self.buffered_output);
 
         self.output_ready = compute_result.is_ok() && !self.is_sink();
     }
 
     async fn call_thread_io(&mut self, _id: usize) {
         let _ = self.receive_input_async().await;
-        let compute_result = self.step.run_io(&mut self.buffered_input, &mut self.buffered_output).await;
+        let compute_result = self
+            .step
+            .run_io(&mut self.buffered_input, &mut self.buffered_output)
+            .await;
 
         self.output_ready = compute_result.is_ok() && !self.is_sink();
     }

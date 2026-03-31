@@ -8,33 +8,35 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::Arc;
+    use zubr_dsp::pipeline::communication_layer::data_management::BufferArray;
 
     use tokio::sync::mpsc::{channel, Receiver};
     use zubr_dsp::initiate_pipeline;
     use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
     use zubr_dsp::pipeline::construction_layer::node_builder::{
-        IntoWhat, PipelineBuildVector, PipelineParameters,
+        PipelineBuildVector, PipelineParameters,
     };
     use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
     use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::thread_per_node::{
         build_per_node_thread_pool, ThreadPoolPerNodeHandle,
     };
 
-    const TEST_VEC: [i32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     fn generate_test_pipeline() -> (
         Arc<PipelineGraph>,
         ThreadPoolPerNodeHandle,
         Receiver<i32>,
-        Receiver<Vec<i32>>,
+        Receiver<BufferArray<i32, 4>>,
     ) {
+        let test_vec: BufferArray<i32, 8> =
+            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
         initiate_pipeline(Level::Debug);
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
         )));
-        let mut source: NodeBuilder<_, _, 0, 1, { IntoWhat::CpuNode }> =
-            NodeBuilder::<(), i32, 0, 1, { IntoWhat::CpuNode }>::add_cpu_pipeline_source(
+        let mut source: NodeBuilder<_, _, 0, 1> =
+            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
                 "test_source".to_string(),
-                TestSourceI32Vec::new(TEST_VEC.to_vec()),
+                TestSourceI32Vec::new(test_vec),
                 build_vector.clone(),
             );
 
@@ -64,6 +66,8 @@ mod tests {
 
     #[test]
     fn test_reassembling_pipeline_cpu() {
+        let test_vec: BufferArray<i32, 8> =
+            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
@@ -82,11 +86,17 @@ mod tests {
                 }
                 let output_value = receiver2.recv().await.unwrap();
                 res_vec_2.push(output_value.clone());
-                error!("SINK 2 Received: {:?}", output_value);
             }
             handle.kill();
-            verify_input_output(TEST_VEC.to_vec(), res_vec_1, |x| x);
-            assert_eq!(res_vec_2, vec![vec![2, 4, 6, 8], vec![10, 12, 14, 16]]);
+            verify_input_output(
+                test_vec,
+                BufferArray::new_with_value(res_vec_1.try_into().unwrap()),
+                |x| x,
+            );
+
+            let res_vec_t: Vec<[i32; 4]> = res_vec_2.iter().map(|x| *x.read()).collect();
+            let res_vec_t: [[i32; 4]; 2] = res_vec_t.try_into().unwrap();
+            assert_eq!(res_vec_t, [[2, 4, 6, 8], [10, 12, 14, 16]]);
         });
     }
 }

@@ -9,7 +9,6 @@ use crate::pipeline::construction_layer::node_types::reconstruct::PipelineSeries
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use log::{debug, info};
 use std::collections::HashMap;
-use std::marker::ConstParamTy;
 
 #[derive(Clone)]
 pub struct PipelineParameters {
@@ -57,31 +56,7 @@ impl PipelineBuildVector {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, ConstParamTy)]
-pub enum IntoWhat {
-    CpuNode,
-    IoNode,
-    InterleaverNode,
-    DeconstructorNode,
-    ReconstructorNode,
-}
-impl IntoWhat {
-    pub fn run_model(&self) -> RunModel {
-        match self {
-            Self::CpuNode | Self::InterleaverNode => RunModel::CPU,
-            Self::IoNode => RunModel::IO,
-            _ => RunModel::Communicator,
-        }
-    }
-}
-
-pub struct BuildingNode<
-    I: Sharable,
-    O: Sharable,
-    const NI: usize,
-    const NO: usize,
-    const VARIANT: IntoWhat,
-> {
+pub struct BuildingNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     id: usize,
     name: String,
     step: Option<Box<dyn PipelineStep<I, O, NI>>>,
@@ -91,9 +66,7 @@ pub struct BuildingNode<
     demanded_input_count: usize,
     initial_state: Option<O>,
 }
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: IntoWhat>
-    BuildingNode<I, O, NI, NO, VARIANT>
-{
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
     pub fn new(name: String, id: usize) -> Self {
         Self {
             id,
@@ -137,7 +110,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         self.initial_state = Some(initial_state);
     }
 
-    fn into_node(mut self) -> PipelineNode<I, O, NI, NO> {
+    fn into_node(mut self, run_model: RunModel) -> PipelineNode<I, O, NI, NO> {
         if self.step.is_none() {
             panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
         }
@@ -149,46 +122,36 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
             self.inputs,
             self.outputs,
             self.initial_state,
-            VARIANT.run_model(),
+            run_model,
         );
 
         new_node
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
-    BuildingNode<I, O, NI, NO, { IntoWhat::IoNode }>
-{
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
     pub fn build_io_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
         let name = self.name.clone();
-        let new_node = self.into_node();
+        let new_node = self.into_node(RunModel::IO);
         (id, name, Box::new(new_node))
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
-    BuildingNode<I, O, NI, NO, { IntoWhat::CpuNode }>
-{
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
     pub fn build_cpu_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
         let id = self.id;
         let name = self.name.clone();
-        let new_node = self.into_node();
+        let new_node = self.into_node(RunModel::CPU);
         (id, name, Box::new(new_node))
     }
 }
 
-impl<T: Sharable, const NO: usize, const BS: usize>
-    BuildingNode<
-        BufferArray<T, BS>,
-        BufferArray<T, { BS / NO }>,
-        1,
-        NO,
-        { IntoWhat::InterleaverNode },
-    >
+impl<T: Sharable, const NO: usize, const IBS: usize, const OBS: usize>
+    BuildingNode<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
 where
-    [(); BS % NO]: Sized,
-    [(); BS / NO]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); IBS % NO]: Sized,
+    [(); IBS % OBS]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     fn into_interleaved_separator(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
@@ -197,7 +160,7 @@ where
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let interleaved_separator: PipelineInterleavedSeparator<T, NO, BS> =
+        let interleaved_separator: PipelineInterleavedSeparator<T, NO, IBS, OBS> =
             PipelineInterleavedSeparator::new(
                 self.inputs.remove(0),
                 match self.outputs.try_into() {
@@ -219,9 +182,7 @@ where
         self.into_interleaved_separator()
     }
 }
-impl<T: Sharable, const NO: usize, const ND: usize>
-    BuildingNode<BufferArray<T, ND>, T, 1, NO, { IntoWhat::DeconstructorNode }>
-{
+impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, ND>, T, 1, NO> {
     fn into_series_deconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -252,9 +213,7 @@ impl<T: Sharable, const NO: usize, const ND: usize>
     }
 }
 
-impl<T: Sharable, const NO: usize, const NR: usize>
-    BuildingNode<T, BufferArray<T, NR>, 1, NO, { IntoWhat::ReconstructorNode }>
-{
+impl<T: Sharable, const NO: usize, const NR: usize> BuildingNode<T, BufferArray<T, NR>, 1, NO> {
     fn into_series_reconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");

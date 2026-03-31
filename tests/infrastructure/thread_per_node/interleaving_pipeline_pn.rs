@@ -8,30 +8,32 @@ mod tests {
 
     use tokio::sync::mpsc::{channel, Receiver};
     use zubr_dsp::initiate_pipeline;
+    use zubr_dsp::pipeline::communication_layer::data_management::BufferArray;
     use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
     use zubr_dsp::pipeline::construction_layer::node_builder::{
-        IntoWhat, PipelineBuildVector, PipelineParameters,
+        PipelineBuildVector, PipelineParameters,
     };
     use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
     use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::thread_per_node::{
         build_per_node_thread_pool, ThreadPoolPerNodeHandle,
     };
 
-    const TEST_VEC: [i32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     fn generate_test_pipeline() -> (
         Arc<PipelineGraph>,
         ThreadPoolPerNodeHandle,
-        Receiver<Vec<i32>>,
-        Receiver<Vec<i32>>,
+        Receiver<BufferArray<i32, 4>>,
+        Receiver<BufferArray<i32, 4>>,
     ) {
+        let test_vec: BufferArray<i32, 8> =
+            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
         initiate_pipeline(Level::Debug);
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
         )));
-        let mut source: NodeBuilder<_, _, 0, 1, { IntoWhat::CpuNode }> =
-            NodeBuilder::<(), i32, 0, 1, { IntoWhat::CpuNode }>::add_cpu_pipeline_source(
+        let mut source: NodeBuilder<_, _, 0, 1> =
+            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
                 "test_source".to_string(),
-                TestSourceI32Vec::new(TEST_VEC.to_vec()),
+                TestSourceI32Vec::new(test_vec),
                 build_vector.clone(),
             );
 
@@ -67,8 +69,8 @@ mod tests {
             handle.start(&rt);
             error!("test_linear_pipeline start");
 
-            assert_eq!(receiver1.recv().await.unwrap(), vec![1, 3, 5, 7]);
-            assert_eq!(receiver2.recv().await.unwrap(), vec![2, 4, 6, 8]);
+            assert_eq!(*receiver1.recv().await.unwrap().read(), [1, 3, 5, 7]);
+            assert_eq!(*receiver2.recv().await.unwrap().read(), [2, 4, 6, 8]);
         });
     }
 }

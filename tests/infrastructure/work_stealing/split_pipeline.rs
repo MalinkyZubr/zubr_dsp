@@ -10,49 +10,51 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::Arc;
+    use zubr_dsp::pipeline::communication_layer::data_management::BufferArray;
 
     use tokio::sync::mpsc::{channel, Receiver};
     use zubr_dsp::initiate_pipeline;
     use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
     use zubr_dsp::pipeline::construction_layer::node_builder::{
-        IntoWhat, PipelineBuildVector, PipelineParameters,
+        PipelineBuildVector, PipelineParameters,
     };
     use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
     use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::work_stealing_full_buffer::{
         build_topographical_thread_pool, ThreadPoolTopographicalHandle,
     };
 
-    const TEST_VEC: [i32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
     fn generate_test_pipeline() -> (
         Arc<PipelineGraph>,
         ThreadPoolTopographicalHandle,
         Receiver<i32>,
         Receiver<i32>,
     ) {
+        let test_vec: BufferArray<i32, 8> =
+            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
         initiate_pipeline(Level::Debug);
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
         )));
-        let mut source: NodeBuilder<_, _, 0, 1, { IntoWhat::CpuNode }> =
-            NodeBuilder::<(), i32, 0, 1, { IntoWhat::CpuNode }>::add_cpu_pipeline_source(
+        let mut source: NodeBuilder<_, _, 0, 1> =
+            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
                 "test_source".to_string(),
-                TestSourceI32::new(TEST_VEC.to_vec()),
+                TestSourceI32::new(test_vec),
                 build_vector.clone(),
             );
 
         let (out_send_1, out_recv_1) = channel(100);
         let (out_send_2, out_recv_2) = channel(100);
-        let mut step1: NodeBuilder<_, _, 1, 3, { IntoWhat::CpuNode }> =
+        let mut step1: NodeBuilder<_, _, 1, 3> =
             source.attach_standard_cpu("test_step1".to_string(), TestLinearI32Mult::new());
-        let step20: NodeBuilder<_, _, 1, 1, { IntoWhat::CpuNode }> =
+        let step20: NodeBuilder<_, _, 1, 1> =
             step1.attach_standard_cpu("test_step20".to_string(), TestLinearI32Mult::new());
-        let step21: NodeBuilder<_, _, 1, 1, { IntoWhat::CpuNode }> =
+        let step21: NodeBuilder<_, _, 1, 1> =
             step1.attach_standard_cpu("test_step21".to_string(), TestLinearI32Mult::new());
-        let step22: NodeBuilder<_, _, 1, 1, { IntoWhat::CpuNode }> =
+        let step22: NodeBuilder<_, _, 1, 1> =
             step1.attach_standard_cpu("test_step22".to_string(), TestLinearI32Mult::new());
 
-        let mut joint_node: NodeBuilder<i32, i32, 3, 2, { IntoWhat::CpuNode }> =
-            NodeBuilder::<i32, i32, 3, 1, { IntoWhat::CpuNode }>::create_cpu_joint_node(
+        let mut joint_node: NodeBuilder<i32, i32, 3, 2> =
+            NodeBuilder::<i32, i32, 3, 1>::create_cpu_joint_node(
                 "test_step3".to_string(),
                 TestAdder::new(),
                 build_vector.clone(),
@@ -84,6 +86,8 @@ mod tests {
     #[test]
     fn test_split_pipeline() {
         let rt = tokio::runtime::Runtime::new().unwrap();
+        let test_vec: BufferArray<i32, 8> =
+            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
 
         rt.block_on(async {
             let (_graph, mut handle, mut receiver1, mut receiver2) = generate_test_pipeline();
@@ -102,8 +106,16 @@ mod tests {
                 error!("SINK 2 Received: {}", output_value);
             }
             handle.kill();
-            verify_input_output(TEST_VEC.to_vec(), res_vec_1, |x| x * 12);
-            verify_input_output(TEST_VEC.to_vec(), res_vec_2, |x| x * 12);
+            verify_input_output(
+                test_vec,
+                BufferArray::new_with_value(res_vec_1.try_into().unwrap()),
+                |x| x * 12,
+            );
+            verify_input_output(
+                test_vec,
+                BufferArray::new_with_value(res_vec_2.try_into().unwrap()),
+                |x| x * 12,
+            );
         });
     }
 }

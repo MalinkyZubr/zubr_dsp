@@ -5,7 +5,6 @@ use crate::pipeline::communication_layer::data_management::{BufferArray, DataWra
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
-
 pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize, const NR: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<I>,
@@ -31,27 +30,33 @@ impl<I: Sharable, const NO: usize, const NR: usize> PipelineSeriesReconstructor<
     }
 }
 
-
 #[async_trait::async_trait]
-impl<I: Sharable, const NO: usize, const NR: usize> CollectibleNode for PipelineSeriesReconstructor<I, NO, NR> {
+impl<I: Sharable, const NO: usize, const NR: usize> CollectibleNode
+    for PipelineSeriesReconstructor<I, NO, NR>
+{
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
         for idx in 0..self.receive_demands {
             match self.input.recv_async().await {
                 Some(mut data) => {
                     data.swap(&mut self.buffered_input.read().read_mut()[idx]);
                     self.input.refill_buffer(data);
-                },
-                None => return None
+                }
+                None => return None,
             }; // unwrap is okay because this assumes all predecessors are ready
         }
-        
-        iterative_send(&mut self.output, &mut self.satiated_edges, &mut self.buffered_input).await.ok()
+
+        iterative_send(
+            &mut self.output,
+            &mut self.satiated_edges,
+            &mut self.buffered_input,
+        )
+        .await
+        .ok()
     }
     fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
         if edge_index < NO {
             Some(self.satiated_edges[edge_index])
-        }
-        else {
+        } else {
             None
         }
     }
@@ -93,10 +98,17 @@ mod tests {
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
 
-        let (channel_wrapped_producer, channel_wrapped_consumer) = crate::pipeline::communication_layer::comms_core::make_crossbeam_queue_handles(12);
+        let (channel_wrapped_producer, channel_wrapped_consumer) =
+            crate::pipeline::communication_layer::comms_core::make_crossbeam_queue_handles(12);
 
         (
-            WrappedSender::new(tx, 1, notify.clone(), capacity.clone(), channel_wrapped_consumer),
+            WrappedSender::new(
+                tx,
+                1,
+                notify.clone(),
+                capacity.clone(),
+                channel_wrapped_consumer,
+            ),
             WrappedReceiver::new(rx, 0, notify, capacity, channel_wrapped_producer),
         )
     }
@@ -150,8 +162,12 @@ mod tests {
         let mut reconstructor = PipelineSeriesReconstructor::new(input, [output1, output2], 2);
 
         // Send test data
-        tx.send_swap(&mut DataWrapper::new_with_value(1)).await.unwrap();
-        tx.send_swap(&mut DataWrapper::new_with_value(2)).await.unwrap();
+        tx.send_swap(&mut DataWrapper::new_with_value(1))
+            .await
+            .unwrap();
+        tx.send_swap(&mut DataWrapper::new_with_value(2))
+            .await
+            .unwrap();
 
         // Run the reconstructor
         let result = reconstructor.run_senders(0).await;

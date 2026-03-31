@@ -4,10 +4,10 @@ use log::info;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::{spawn as thread_spawn, JoinHandle};
+use tokio::select;
 use tokio::sync::watch::{
     channel as watch_channel, Receiver as WatchReceiver, Sender as WatchSender,
 };
-use tokio::{select};
 
 #[derive(PartialEq, Clone, Copy)]
 enum ThreadOrder {

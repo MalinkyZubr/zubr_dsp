@@ -1,26 +1,16 @@
 use crate::pipeline::communication_layer::comms_core::channel_wrapped;
-use crate::pipeline::construction_layer::node_builder::{
-    BuildingNode, IntoWhat, PipelineBuildVector,
-};
+use crate::pipeline::communication_layer::data_management::BufferArray;
+use crate::pipeline::construction_layer::node_builder::{BuildingNode, PipelineBuildVector};
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_traits::{Sharable, Sink, Source, Unit};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::pipeline::communication_layer::data_management::BufferArray;
 
-pub struct NodeBuilder<
-    I: Sharable,
-    O: Sharable,
-    const NI: usize,
-    const NO: usize,
-    const VARIANT: IntoWhat,
-> {
-    node_predecessor: BuildingNode<I, O, NI, NO, VARIANT>,
+pub struct NodeBuilder<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
+    node_predecessor: BuildingNode<I, O, NI, NO>,
     build_vector: Rc<RefCell<PipelineBuildVector>>,
 }
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: IntoWhat>
-    NodeBuilder<I, O, NI, NO, VARIANT>
-{
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, O, NI, NO> {
     pub fn get_node_id(&self) -> usize {
         self.node_predecessor.get_id()
     }
@@ -29,7 +19,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         &mut self,
         name: String,
         step: impl PipelineStep<O, F, NIN> + 'static,
-    ) -> NodeBuilder<O, F, NIN, NON, { IntoWhat::IoNode }> {
+    ) -> NodeBuilder<O, F, NIN, NON> {
         self.attach_standard(name, step)
     }
 
@@ -37,20 +27,15 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         &mut self,
         name: String,
         step: impl PipelineStep<O, F, NIN> + 'static,
-    ) -> NodeBuilder<O, F, NIN, NON, { IntoWhat::CpuNode }> {
+    ) -> NodeBuilder<O, F, NIN, NON> {
         self.attach_standard(name, step)
     }
 
-    fn attach_standard<
-        F: Sharable,
-        const NIN: usize,
-        const NON: usize,
-        const N_VARIANT: IntoWhat,
-    >(
+    fn attach_standard<F: Sharable, const NIN: usize, const NON: usize>(
         &mut self,
         name: String,
         step: impl PipelineStep<O, F, NIN> + 'static,
-    ) -> NodeBuilder<O, F, NIN, NON, N_VARIANT> {
+    ) -> NodeBuilder<O, F, NIN, NON> {
         // attach a step to the selected node (self) and create a thread
         // produce a successor node to continue the pipeline
         let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
@@ -76,7 +61,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         name: String,
         step: impl PipelineStep<O, (), 1> + Sink + 'static,
     ) -> Self {
-        let new_sink = self.add_pipeline_sink::<{ IntoWhat::IoNode }>(name, step);
+        let new_sink = self.add_pipeline_sink(name, step);
         self.build_vector
             .borrow_mut()
             .add_node(new_sink.build_io_node());
@@ -88,18 +73,18 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         name: String,
         step: impl PipelineStep<O, (), 1> + Sink + 'static,
     ) -> Self {
-        let new_sink = self.add_pipeline_sink::<{ IntoWhat::CpuNode }>(name, step);
+        let new_sink = self.add_pipeline_sink(name, step);
         self.build_vector
             .borrow_mut()
             .add_node(new_sink.build_cpu_node());
         self
     }
 
-    fn add_pipeline_sink<const N_VARIANT: IntoWhat>(
+    fn add_pipeline_sink(
         &mut self,
         name: String,
         step: impl PipelineStep<O, (), 1> + 'static + Sink,
-    ) -> BuildingNode<O, (), 1, 0, N_VARIANT> {
+    ) -> BuildingNode<O, (), 1, 0> {
         // End a linear pipeline branch, allowing the step itself to handle output to other parts of the program
         let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<O>(
@@ -119,31 +104,23 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         name: String,
         source_step: impl PipelineStep<(), F, 0> + Source + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
-    ) -> NodeBuilder<(), F, 0, NON, { IntoWhat::IoNode }> {
-        NodeBuilder::<(), F, 0, NON, { IntoWhat::IoNode }>::add_pipeline_source(
-            name,
-            source_step,
-            build_vector,
-        )
+    ) -> NodeBuilder<(), F, 0, NON> {
+        NodeBuilder::<(), F, 0, NON>::add_pipeline_source(name, source_step, build_vector)
     }
 
     pub fn add_cpu_pipeline_source<F: Sharable, const NON: usize>(
         name: String,
         source_step: impl PipelineStep<(), F, 0> + Source + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
-    ) -> NodeBuilder<(), F, 0, NON, { IntoWhat::CpuNode }> {
-        NodeBuilder::<(), F, 0, NON, { IntoWhat::CpuNode }>::add_pipeline_source(
-            name,
-            source_step,
-            build_vector,
-        )
+    ) -> NodeBuilder<(), F, 0, NON> {
+        NodeBuilder::<(), F, 0, NON>::add_pipeline_source(name, source_step, build_vector)
     }
 
-    fn add_pipeline_source<F: Sharable, const NON: usize, const N_VARIANT: IntoWhat>(
+    fn add_pipeline_source<F: Sharable, const NON: usize>(
         name: String,
         source_step: impl PipelineStep<(), F, 0> + 'static + Source,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
-    ) -> NodeBuilder<(), F, 0, NON, N_VARIANT>
+    ) -> NodeBuilder<(), F, 0, NON>
     where
         I: Unit,
     {
@@ -161,19 +138,15 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         name: String,
         step: impl PipelineStep<I, O, NIN> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
-    ) -> NodeBuilder<I, O, NIN, NON, { IntoWhat::CpuNode }> {
-        NodeBuilder::<I, O, NIN, NON, { IntoWhat::CpuNode }>::create_joint_node(
-            name,
-            step,
-            build_vector,
-        )
+    ) -> NodeBuilder<I, O, NIN, NON> {
+        NodeBuilder::<I, O, NIN, NON>::create_joint_node(name, step, build_vector)
     }
 
-    fn create_joint_node<const NIN: usize, const NON: usize, const N_VARIANT: IntoWhat>(
+    fn create_joint_node<const NIN: usize, const NON: usize>(
         name: String,
         step: impl PipelineStep<I, O, NIN> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
-    ) -> NodeBuilder<I, O, NIN, NON, N_VARIANT> {
+    ) -> NodeBuilder<I, O, NIN, NON> {
         let mut new_node = BuildingNode::new(name, build_vector.borrow_mut().get_new_id());
         new_node.attach_step(Box::new(step));
 
@@ -183,9 +156,9 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
         }
     }
 
-    fn feed_into<F: Sharable, const NIF: usize, const NOF: usize, const JVARIANT: IntoWhat>(
+    fn feed_into<F: Sharable, const NIF: usize, const NOF: usize>(
         mut self,
-        joint_builder: &mut NodeBuilder<O, F, NIF, NOF, JVARIANT>,
+        joint_builder: &mut NodeBuilder<O, F, NIF, NOF>,
     ) -> Self {
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
@@ -200,14 +173,14 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
     }
     pub fn feed_into_io<F: Sharable, const NIF: usize, const NOF: usize>(
         self,
-        joint_builder: &mut NodeBuilder<O, F, NIF, NOF, { IntoWhat::IoNode }>,
+        joint_builder: &mut NodeBuilder<O, F, NIF, NOF>,
     ) -> Self {
         self.feed_into(joint_builder)
     }
 
     pub fn feed_into_cpu<F: Sharable, const NIF: usize, const NOF: usize>(
         self,
-        joint_builder: &mut NodeBuilder<O, F, NIF, NOF, { IntoWhat::CpuNode }>,
+        joint_builder: &mut NodeBuilder<O, F, NIF, NOF>,
     ) -> Self {
         self.feed_into(joint_builder)
     }
@@ -221,7 +194,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
     pub fn attach_series_reconstructor<const NON: usize, const ND: usize>(
         &mut self,
         name: String,
-    ) -> NodeBuilder<O, BufferArray<O, ND>, 1, NON, { IntoWhat::ReconstructorNode }> {
+    ) -> NodeBuilder<O, BufferArray<O, ND>, 1, NON> {
         let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
@@ -240,13 +213,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const VARIANT: 
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const BS: usize, const VARIANT: IntoWhat>
-    NodeBuilder<I, BufferArray<O, BS>, NI, NO, VARIANT>
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const BS: usize>
+    NodeBuilder<I, BufferArray<O, BS>, NI, NO>
 {
     pub fn attach_interleaved_separator<const NON: usize>(
         &mut self,
         name: String,
-    ) -> NodeBuilder<BufferArray<O, BS>, BufferArray<O, {BS / NON}>, 1, NON, { IntoWhat::InterleaverNode }> {
+    ) -> NodeBuilder<BufferArray<O, BS>, BufferArray<O, { BS / NON }>, 1, NON> {
         let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<BufferArray<O, BS>>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
@@ -266,7 +239,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const BS: usize
     pub fn attach_series_deconstructor<const NON: usize>(
         &mut self,
         name: String,
-    ) -> NodeBuilder<BufferArray<O, BS>, O, 1, NON, { IntoWhat::DeconstructorNode }> {
+    ) -> NodeBuilder<BufferArray<O, BS>, O, 1, NON> {
         let mut new_node = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<BufferArray<O, BS>>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
@@ -284,9 +257,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const BS: usize
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
-    NodeBuilder<I, O, NI, NO, { IntoWhat::CpuNode }>
-{
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, O, NI, NO> {
     pub fn submit_cpu(self) {
         self.build_vector
             .borrow_mut()
@@ -294,9 +265,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
-    NodeBuilder<I, O, NI, NO, { IntoWhat::IoNode }>
-{
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, O, NI, NO> {
     pub fn submit_io(self) {
         self.build_vector
             .borrow_mut()
@@ -304,7 +273,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize>
     }
 }
 
-impl<T: Sharable, const NO: usize, const NR: usize> NodeBuilder<T, BufferArray<T, NR>, 1, NO, { IntoWhat::ReconstructorNode }> {
+impl<T: Sharable, const NO: usize, const NR: usize> NodeBuilder<T, BufferArray<T, NR>, 1, NO> {
     pub fn submit_series_reconstructor(self) {
         self.build_vector
             .borrow_mut()
@@ -312,11 +281,11 @@ impl<T: Sharable, const NO: usize, const NR: usize> NodeBuilder<T, BufferArray<T
     }
 }
 
-impl<T: Sharable, const NO: usize, const BS: usize>
-    NodeBuilder<BufferArray<T, BS>, BufferArray<T, {BS / NO}>, 1, NO, { IntoWhat::InterleaverNode }>
+impl<T: Sharable, const NO: usize, const IBS: usize, const OBS: usize>
+    NodeBuilder<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
 where
-    [(); BS % NO]: Sized,
-    [(); BS / NO]: Sized, // the input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); IBS % NO]: Sized,
+    [(); IBS % OBS]: Sized, // the input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     pub fn submit_interleaved_separator(self) {
         self.build_vector
@@ -325,7 +294,7 @@ where
     }
 }
 
-impl<T: Sharable, const NO: usize, const ND: usize> NodeBuilder<BufferArray<T, ND>, T, 1, NO, { IntoWhat::DeconstructorNode }> {
+impl<T: Sharable, const NO: usize, const ND: usize> NodeBuilder<BufferArray<T, ND>, T, 1, NO> {
     pub fn submit_series_deconstructor(self) {
         self.build_vector
             .borrow_mut()

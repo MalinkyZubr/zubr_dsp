@@ -1,73 +1,89 @@
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use std::mem::swap;
 
-
 #[derive(Copy, Clone, Default)]
-pub struct DataWrapper<T: Sharable + Send + Sync + Copy>{
-    value: T
+pub struct DataWrapper<T: Sharable + Send + Sync + Copy> {
+    value: T,
 }
 
 impl<T: Sharable + Send + Sync + Copy> DataWrapper<T>
-where T: Copy {
+where
+    T: Copy,
+{
     pub fn new() -> Self {
         DataWrapper {
-            value: Default::default()
+            value: Default::default(),
         }
     }
-    
+
     pub fn new_with_value(value: T) -> Self {
-        DataWrapper {
-            value
-        }
+        DataWrapper { value }
     }
-    
+
     pub fn read(&mut self) -> &mut T {
         &mut self.value
     }
-    
+
     pub fn swap(&mut self, other: &mut T) {
         swap(&mut self.value, other);
     }
-    
+
     pub fn swap_st(&mut self, other: &mut Self) {
         swap(&mut self.value, &mut other.value);
     }
-    
+
     pub fn copy_to_many<const N: usize>(&self, outputs: &mut [Self; N]) {
         for output in outputs.iter_mut() {
             output.value = self.value // bitwise copies
         }
     }
-    
+
     pub fn copy_to(&self, output: &mut Self) {
         output.value = self.value
     }
-}
 
+    pub fn copy_from_st(&mut self, source: &Self) {
+        self.value = source.value
+    }
+
+    pub fn copy_from(&mut self, source: &T) {
+        self.value = *source
+    }
+}
 
 #[derive(Copy, Clone)]
 pub struct BufferArray<T: Sharable, const N: usize> {
-    val: [T; N]
+    val: [T; N],
 }
 impl<T: Sharable, const N: usize> BufferArray<T, N> {
     pub fn new() -> Self {
         BufferArray {
-            val: [Default::default(); N]
+            val: [Default::default(); N],
         }
     }
-    
+
     pub fn new_with_value(value: [T; N]) -> Self {
-        BufferArray {
-            val: value
-        }
+        BufferArray { val: value }
     }
-    
+
     pub fn read_mut(&mut self) -> &mut [T; N] {
         &mut self.val
     }
-    
+
     pub fn read(&self) -> &[T; N] {
         &self.val
+    }
+
+    pub fn get_mut(&mut self, index: usize) -> &mut T {
+        &mut self.val[index]
+    }
+
+    pub fn get(&self, index: usize) -> &T {
+        &self.val[index]
+    }
+
+    pub fn len(&self) -> usize {
+        N
     }
 }
 impl<T: Sharable, const N: usize> Default for BufferArray<T, N> {
@@ -75,7 +91,6 @@ impl<T: Sharable, const N: usize> Default for BufferArray<T, N> {
         Self::new()
     }
 }
-
 
 #[cfg(test)]
 mod tests {
