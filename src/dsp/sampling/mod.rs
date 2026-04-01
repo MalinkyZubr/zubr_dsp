@@ -1,3 +1,2 @@
-pub mod upsample;
-pub mod decimation;
+pub mod resampling;
 pub mod sampling_formulas;

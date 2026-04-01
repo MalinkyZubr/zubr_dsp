@@ -1,9 +1,9 @@
 use rustfft::FftPlanner;
 use crate::dsp::fft::fftshift::fft_shift;
-use num::Complex;
+use num::{Complex, Num};
 
-pub struct ImpulseResponse {
-    pub reversed_impulse_response: Vec<f32>,
+pub struct ImpulseResponse<T: Num + Sharable, const NumSamples: usize> {
+    pub reversed_impulse_response: [],
 }
 impl ImpulseResponse {
     pub fn new_configured(mut impulse_response: Vec<f32>) -> Self {

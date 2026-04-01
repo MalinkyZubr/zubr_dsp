@@ -82,6 +82,10 @@ impl<T: Sharable, const N: usize> BufferArray<T, N> {
         &self.val[index]
     }
 
+    pub fn set(&mut self, index: usize, value: T) {
+        self.val[index] = value;
+    }
+
     pub fn len(&self) -> usize {
         N
     }
