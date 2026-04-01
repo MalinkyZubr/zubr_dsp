@@ -31,7 +31,7 @@ mod tests {
             PipelineParameters::new(16),
         )));
         let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
+            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "test_source".to_string(),
                 TestSourceI32Vec::new(test_vec),
                 build_vector.clone(),
@@ -43,11 +43,11 @@ mod tests {
         let interleaved_separator: NodeBuilder<BufferArray<i32, 8>, BufferArray<i32, 4>, 1, 2> =
             source
                 .attach_interleaved_separator::<2>("separator 1".to_string())
-                .add_cpu_pipeline_sink(
+                .add_pipeline_sink(
                     "channel 1 sink".to_string(),
                     TestSinkI32Vec::new(out_send_1),
                 )
-                .add_cpu_pipeline_sink(
+                .add_pipeline_sink(
                     "channel 2 sink".to_string(),
                     TestSinkI32Vec::new(out_send_2),
                 );

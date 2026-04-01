@@ -36,7 +36,7 @@ mod tests {
             PipelineParameters::new(16),
         )));
         let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
+            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "test_source".to_string(),
                 TestSourceI32::new(test_vec),
                 build_vector.clone(),
@@ -45,30 +45,30 @@ mod tests {
         let (out_send_1, out_recv_1) = channel(100);
         let (out_send_2, out_recv_2) = channel(100);
         let mut step1: NodeBuilder<_, _, 1, 3> =
-            source.attach_standard_cpu("test_step1".to_string(), TestLinearI32Mult::new());
+            source.attach_standard("test_step1".to_string(), TestLinearI32Mult::new());
         let step20: NodeBuilder<_, _, 1, 1> =
-            step1.attach_standard_cpu("test_step20".to_string(), TestLinearI32Mult::new());
+            step1.attach_standard("test_step20".to_string(), TestLinearI32Mult::new());
         let step21: NodeBuilder<_, _, 1, 1> =
-            step1.attach_standard_cpu("test_step21".to_string(), TestLinearI32Mult::new());
+            step1.attach_standard("test_step21".to_string(), TestLinearI32Mult::new());
         let step22: NodeBuilder<_, _, 1, 1> =
-            step1.attach_standard_cpu("test_step22".to_string(), TestLinearI32Mult::new());
+            step1.attach_standard("test_step22".to_string(), TestLinearI32Mult::new());
 
         let mut joint_node: NodeBuilder<i32, i32, 3, 2> =
-            NodeBuilder::<i32, i32, 3, 1>::create_cpu_joint_node(
+            NodeBuilder::<i32, i32, 3, 1>::create_joint_node(
                 "test_step3".to_string(),
                 TestAdder::new(),
                 build_vector.clone(),
             );
-        step20.feed_into_cpu(&mut joint_node).submit_cpu();
-        step21.feed_into_cpu(&mut joint_node).submit_cpu();
-        step22.feed_into_cpu(&mut joint_node).submit_cpu();
+        step20.feed_into(&mut joint_node).submit_cpu();
+        step21.feed_into(&mut joint_node).submit_cpu();
+        step22.feed_into(&mut joint_node).submit_cpu();
 
         joint_node
-            .add_cpu_pipeline_sink(
+            .add_pipeline_sink(
                 "test_sink1".to_string(),
                 TestSinkI32::new(out_send_1.clone()),
             )
-            .add_cpu_pipeline_sink(
+            .add_pipeline_sink(
                 "test_sink2".to_string(),
                 TestSinkI32::new(out_send_2.clone()),
             )

@@ -36,7 +36,7 @@ mod tests {
             PipelineParameters::new(16),
         )));
         let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
+            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "test_source".to_string(),
                 TestSourceI32::new(test_vec),
                 build_vector.clone(),
@@ -44,8 +44,8 @@ mod tests {
 
         let (out_send, out_recv) = channel(100);
         let step1: NodeBuilder<_, _, 1, 1> = source
-            .attach_standard_cpu("test_step".to_string(), TestLinearI32Mult::new())
-            .add_cpu_pipeline_sink("test_sink".to_string(), TestSinkI32::new(out_send));
+            .attach_standard("test_step".to_string(), TestLinearI32Mult::new())
+            .add_pipeline_sink("test_sink".to_string(), TestSinkI32::new(out_send));
 
         source.submit_cpu();
         step1.submit_cpu();
@@ -68,7 +68,7 @@ mod tests {
             PipelineParameters::new(16),
         )));
         let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_io_pipeline_source(
+            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "test_source".to_string(),
                 TestSourceI32::new(test_vec),
                 build_vector.clone(),
@@ -76,8 +76,8 @@ mod tests {
 
         let (out_send, out_recv) = channel(100);
         let step1: NodeBuilder<_, _, 1, 1> = source
-            .attach_standard_io("test_step".to_string(), TestLinearI32Mult::new())
-            .add_io_pipeline_sink("test_sink".to_string(), TestSinkI32::new(out_send));
+            .attach_standard("test_step".to_string(), TestLinearI32Mult::new())
+            .add_pipeline_sink("test_sink".to_string(), TestSinkI32::new(out_send));
 
         source.submit_io();
         step1.submit_io();

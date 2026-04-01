@@ -1,4 +1,4 @@
 //pub mod ref_based;
 pub mod fftshift;
-pub mod linear;
+mod fft;
 //pub mod fft;

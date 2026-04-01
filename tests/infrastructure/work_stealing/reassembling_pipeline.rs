@@ -34,7 +34,7 @@ mod tests {
             PipelineParameters::new(16),
         )));
         let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_cpu_pipeline_source(
+            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "test_source".to_string(),
                 TestSourceI32Vec::new(test_vec),
                 build_vector.clone(),
@@ -46,12 +46,12 @@ mod tests {
         let deconstructor =
             source.attach_series_deconstructor::<2>("test deconstructor".to_string());
         let mut deconstructor = deconstructor
-            .add_cpu_pipeline_sink("test_sink_1".to_string(), TestSinkI32::new(out_send_1));
+            .add_pipeline_sink("test_sink_1".to_string(), TestSinkI32::new(out_send_1));
         let mut step1 = deconstructor
-            .attach_standard_cpu::<_, 1, 1>("test node 1".to_string(), TestLinearI32Mult::new());
+            .attach_standard::<_, 1, 1>("test node 1".to_string(), TestLinearI32Mult::new());
         let reconstructor = step1
             .attach_series_reconstructor::<1, 4>("test reconstructor".to_string())
-            .add_cpu_pipeline_sink("vec sink".to_string(), TestSinkI32Vec::new(out_send_2));
+            .add_pipeline_sink("vec sink".to_string(), TestSinkI32Vec::new(out_send_2));
 
         deconstructor.submit_series_deconstructor();
         step1.submit_cpu();
