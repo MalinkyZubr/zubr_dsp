@@ -2,8 +2,8 @@ use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedS
 use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use std::mem;
 use log::{debug, error, warn};
+use std::mem;
 
 pub struct PipelineInterleavedSeparator<
     I: Sharable,
@@ -117,7 +117,10 @@ where
 
         for (idx, value) in input.read().read_mut().iter_mut().enumerate() {
             let channel_unit = &mut self.buffered_data[idx % NUM_CHANNELS];
-            mem::swap(&mut channel_unit.read().read_mut()[idx / NUM_CHANNELS], value);
+            mem::swap(
+                &mut channel_unit.read().read_mut()[idx / NUM_CHANNELS],
+                value,
+            );
         }
 
         self.input.refill_buffer(input);

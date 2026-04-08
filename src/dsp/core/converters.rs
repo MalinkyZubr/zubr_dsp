@@ -1,10 +1,9 @@
-use std::mem;
-use num::Num;
-use num::Complex;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-
+use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use num::Complex;
+use num::Num;
+use std::mem;
 
 pub struct RealToComplex<T: Sharable + Num, const BS: usize> {
     internal_buffer: BufferArray<Complex<T>, BS>,
@@ -16,15 +15,24 @@ impl<T: Sharable + Num, const BS: usize> RealToComplex<T, BS> {
         }
     }
 }
-impl<T: Sharable + Num, const BS: usize> PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for RealToComplex<T, BS> {
-    fn run_cpu(&mut self, input: &mut [DataWrapper<BufferArray<T, BS>>; 1], output: &mut DataWrapper<BufferArray<Complex<T>, BS>>) -> Result<(), ()> {
+impl<T: Sharable + Num, const BS: usize>
+    PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for RealToComplex<T, BS>
+{
+    fn run_cpu(
+        &mut self,
+        input: &mut [DataWrapper<BufferArray<T, BS>>; 1],
+        output: &mut DataWrapper<BufferArray<Complex<T>, BS>>,
+    ) -> Result<(), ()> {
         let direct_ref = input[0].read().read_mut();
         for idx in 0..BS {
-            mem::swap(&mut self.internal_buffer.read_mut()[idx].re, &mut direct_ref[idx]);
+            mem::swap(
+                &mut self.internal_buffer.read_mut()[idx].re,
+                &mut direct_ref[idx],
+            );
         }
-        
+
         output.swap(&mut self.internal_buffer);
-        
+
         Ok(())
     }
 }
@@ -39,11 +47,20 @@ impl<T: Sharable + Num, const BS: usize> ImagToComplex<T, BS> {
         }
     }
 }
-impl<T: Sharable + Num, const BS: usize> PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for ImagToComplex<T, BS> {
-    fn run_cpu(&mut self, input: &mut [DataWrapper<BufferArray<T, BS>>; 1], output: &mut DataWrapper<BufferArray<Complex<T>, BS>>) -> Result<(), ()> {
+impl<T: Sharable + Num, const BS: usize>
+    PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for ImagToComplex<T, BS>
+{
+    fn run_cpu(
+        &mut self,
+        input: &mut [DataWrapper<BufferArray<T, BS>>; 1],
+        output: &mut DataWrapper<BufferArray<Complex<T>, BS>>,
+    ) -> Result<(), ()> {
         let direct_ref = input[0].read().read_mut();
         for idx in 0..BS {
-            mem::swap(&mut self.internal_buffer.read_mut()[idx].im, &mut direct_ref[idx]);
+            mem::swap(
+                &mut self.internal_buffer.read_mut()[idx].im,
+                &mut direct_ref[idx],
+            );
         }
 
         output.swap(&mut self.internal_buffer);
@@ -52,9 +69,8 @@ impl<T: Sharable + Num, const BS: usize> PipelineStep<BufferArray<T, BS>, Buffer
     }
 }
 
-
 pub struct ComposeComplex<T: Sharable + Num, const BS: usize> {
-    internal_buffer: BufferArray<Complex<T>, BS>
+    internal_buffer: BufferArray<Complex<T>, BS>,
 }
 impl<T: Sharable + Num, const BS: usize> ComposeComplex<T, BS> {
     pub fn new() -> Self {
@@ -63,11 +79,23 @@ impl<T: Sharable + Num, const BS: usize> ComposeComplex<T, BS> {
         }
     }
 }
-impl<T: Sharable + Num, const BS: usize> PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 2> for ComposeComplex<T, BS> {
-    fn run_cpu(&mut self, input: &mut [DataWrapper<BufferArray<T, BS>>; 2], output: &mut DataWrapper<BufferArray<Complex<T>, BS>>) -> Result<(), ()> {
+impl<T: Sharable + Num, const BS: usize>
+    PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 2> for ComposeComplex<T, BS>
+{
+    fn run_cpu(
+        &mut self,
+        input: &mut [DataWrapper<BufferArray<T, BS>>; 2],
+        output: &mut DataWrapper<BufferArray<Complex<T>, BS>>,
+    ) -> Result<(), ()> {
         for idx in 0..BS {
-            mem::swap(&mut self.internal_buffer.read_mut()[idx].re, &mut input[0].read().read_mut()[idx]);
-            mem::swap(&mut self.internal_buffer.read_mut()[idx].im, &mut input[1].read().read_mut()[idx]);
+            mem::swap(
+                &mut self.internal_buffer.read_mut()[idx].re,
+                &mut input[0].read().read_mut()[idx],
+            );
+            mem::swap(
+                &mut self.internal_buffer.read_mut()[idx].im,
+                &mut input[1].read().read_mut()[idx],
+            );
         }
 
         output.swap(&mut self.internal_buffer);
@@ -76,14 +104,15 @@ impl<T: Sharable + Num, const BS: usize> PipelineStep<BufferArray<T, BS>, Buffer
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use num::Complex;
 
     // Helper
-    fn buffer_from_array<T: Copy + Default + Sharable, const N: usize>(data: [T; N]) -> BufferArray<T, N> {
+    fn buffer_from_array<T: Copy + Default + Sharable, const N: usize>(
+        data: [T; N],
+    ) -> BufferArray<T, N> {
         let mut buf = BufferArray::new();
         *buf.read_mut() = data;
         buf
@@ -102,8 +131,7 @@ mod tests {
         let input_data = [1, 2, 3, 4];
         let mut input = [DataWrapper::new_with_value(buffer_from_array(input_data))];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
@@ -124,8 +152,7 @@ mod tests {
         let input_data = [5, 6, 7, 8];
         let mut input = [DataWrapper::new_with_value(buffer_from_array(input_data))];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
@@ -150,8 +177,7 @@ mod tests {
         let input_data = [1, 2, 3, 4];
         let mut input = [DataWrapper::new_with_value(buffer_from_array(input_data))];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
@@ -172,8 +198,7 @@ mod tests {
         let input_data = [9, 8, 7, 6];
         let mut input = [DataWrapper::new_with_value(buffer_from_array(input_data))];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
@@ -202,8 +227,7 @@ mod tests {
             DataWrapper::new_with_value(buffer_from_array(imag)),
         ];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
@@ -228,11 +252,9 @@ mod tests {
             DataWrapper::new_with_value(buffer_from_array(imag)),
         ];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
-        
 
         for i in 0..N {
             assert_eq!(input[0].read().read()[i], 0);
@@ -258,8 +280,7 @@ mod tests {
             DataWrapper::new_with_value(buffer_from_array(imag)),
         ];
 
-        let mut output =
-            DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
+        let mut output = DataWrapper::new_with_value(BufferArray::<Complex<i32>, N>::new());
 
         step.run_cpu(&mut input, &mut output).unwrap();
 

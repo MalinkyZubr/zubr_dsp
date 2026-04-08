@@ -1,4 +1,6 @@
-use crate::pipeline::communication_layer::comms_core::{channel_wrapped, WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::comms_core::{
+    channel_wrapped, WrappedReceiver, WrappedSender,
+};
 use crate::pipeline::communication_layer::data_management::BufferArray;
 use crate::pipeline::construction_layer::node_builder::{BuildingNode, PipelineBuildVector};
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
@@ -17,24 +19,30 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
     pub fn get_build_vector(&self) -> Rc<RefCell<PipelineBuildVector>> {
         self.build_vector.clone()
     }
-    
-    pub(in crate::pipeline::construction_layer) fn attach_to_recipe_input(&mut self, dest_id: usize) -> WrappedReceiver<O> {
+
+    pub(in crate::pipeline::construction_layer) fn attach_to_recipe_input(
+        &mut self,
+        dest_id: usize,
+    ) -> WrappedReceiver<O> {
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
             self.node_predecessor.get_id(),
-            dest_id
+            dest_id,
         );
         self.node_predecessor.add_output(sender);
 
         receiver
     }
-    
-    pub(in crate::pipeline::construction_layer) fn attach_to_recipe_output(&mut self, receiver: WrappedReceiver<I>) {
+
+    pub(in crate::pipeline::construction_layer) fn attach_to_recipe_output(
+        &mut self,
+        receiver: WrappedReceiver<I>,
+    ) {
         self.node_predecessor.add_input(receiver);
     }
-    
+
     // pub(in crate::pipeline::construction_layer::builders) fn attach_to_recipe_output(&mut self, new_id: usize) -> WrappedReceiver<O> {
-    //     
+    //
     // }
 
     pub fn attach_standard<F: Sharable, const NIN: usize, const NON: usize>(
@@ -69,7 +77,8 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         step: impl PipelineStep<O, (), 1> + 'static + Sink,
     ) -> Self {
         // End a linear pipeline branch, allowing the step itself to handle output to other parts of the program
-        let mut new_node:  BuildingNode<O, (), 1, 0> = BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
+        let mut new_node: BuildingNode<O, (), 1, 0> =
+            BuildingNode::new(name, self.build_vector.borrow_mut().get_new_id());
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector.borrow_mut().get_parameters().buff_size,
             self.node_predecessor.get_id(),
@@ -85,7 +94,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
             .add_node(new_node.build_cpu_node());
         self
     }
-    
+
     pub fn create_standalone_sink<T: Sharable>(
         name: String,
         step: impl PipelineStep<T, (), 1> + 'static + Sink,
@@ -93,7 +102,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
     ) -> NodeBuilder<T, (), 1, 0> {
         let mut new_node = BuildingNode::new(name, build_vector.borrow_mut().get_new_id());
         new_node.attach_step(Box::new(step));
-        
+
         NodeBuilder {
             node_predecessor: new_node,
             build_vector,
@@ -122,8 +131,11 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         name: String,
         step: impl PipelineStep<I, O, NIN> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
-    ) 
-        -> NodeBuilder<I, O, NIN, NON> where [(); NIN - 2] : Sized, { // where statement requires that NIN is greater than 1
+    ) -> NodeBuilder<I, O, NIN, NON>
+    where
+        [(); NIN - 2]: Sized,
+    {
+        // where statement requires that NIN is greater than 1
         let mut new_node = BuildingNode::new(name, build_vector.borrow_mut().get_new_id());
         new_node.attach_step(Box::new(step));
 
@@ -132,10 +144,14 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
             build_vector,
         }
     }
-    
-    pub fn create_standalone_node(name: String, step: impl PipelineStep<I, O, 1> + 'static, build_vector: Rc<RefCell<PipelineBuildVector>>) -> NodeBuilder<I, O, 1, 1> {
+
+    pub fn create_standalone_node(
+        name: String,
+        step: impl PipelineStep<I, O, 1> + 'static,
+        build_vector: Rc<RefCell<PipelineBuildVector>>,
+    ) -> NodeBuilder<I, O, 1, 1> {
         let new_id = build_vector.borrow_mut().get_new_id();
-        
+
         let mut new_node = BuildingNode::new(name, new_id);
         new_node.attach_step(Box::new(step));
 
@@ -160,7 +176,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
 
         self
     }
-    
+
     pub fn add_initial_state(mut self, initial_state: O) -> Self {
         // must perform loop detection at construction time to verify that all loops produce a base value to avoid starting lockups
         self.node_predecessor.add_initial_state(initial_state);
@@ -232,7 +248,6 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const BS: usize
         }
     }
 }
-
 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, O, NI, NO> {
     pub fn submit_io(self) {

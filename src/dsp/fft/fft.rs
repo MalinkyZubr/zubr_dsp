@@ -24,7 +24,8 @@ impl<T: FftNum, const BSize: usize> FFT<T, BSize> {
     }
 }
 impl<T: FftNum + Default, const BSize: usize>
-    PipelineStep<BufferArray<Complex<T>, BSize>, BufferArray<Complex<T>, BSize>, 1> for FFT<T, BSize>
+    PipelineStep<BufferArray<Complex<T>, BSize>, BufferArray<Complex<T>, BSize>, 1>
+    for FFT<T, BSize>
 {
     fn run_cpu(
         &mut self,
