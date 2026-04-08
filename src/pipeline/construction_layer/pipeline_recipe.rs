@@ -1,4 +1,6 @@
-use crate::pipeline::communication_layer::comms_core::{channel_wrapped, WrappedReceiver, WrappedSender};
+use crate::pipeline::communication_layer::comms_core::{
+    channel_wrapped, WrappedReceiver, WrappedSender,
+};
 use crate::pipeline::construction_layer::builders::NodeBuilder;
 use crate::pipeline::construction_layer::node_builder::PipelineBuildVector;
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
@@ -42,7 +44,11 @@ impl<T: Sharable> RecipeOutputMapping<T> {
         builder: &mut NodeBuilder<T, F, NI, NO>,
     ) {
         let (sender, receiver) = channel_wrapped::<T>(
-            builder.get_build_vector().borrow_mut().get_parameters().buff_size,
+            builder
+                .get_build_vector()
+                .borrow_mut()
+                .get_parameters()
+                .buff_size,
             self.id,
             builder.get_node_id(),
         );
@@ -51,8 +57,11 @@ impl<T: Sharable> RecipeOutputMapping<T> {
     }
 }
 
-type BuildFunction<I: Sharable, O: Sharable, const NI: usize, const NO: usize> =
-    fn([RecipeInputMapping<I>; NI], [RecipeOutputMapping<O>; NO], &mut Rc<RefCell<PipelineBuildVector>>);
+type BuildFunction<I: Sharable, O: Sharable, const NI: usize, const NO: usize> = fn(
+    [RecipeInputMapping<I>; NI],
+    [RecipeOutputMapping<O>; NO],
+    &mut Rc<RefCell<PipelineBuildVector>>,
+);
 pub struct PipelineRecipe<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     build_function: BuildFunction<I, O, NI, NO>, // this function builds the pipeline. The parameters represent mappings from inputs to internal nodes. The second maps from internal nodes to outputs
     build_vector: Rc<RefCell<PipelineBuildVector>>,
@@ -91,7 +100,8 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineRecipe<
     }
 
     pub fn build(mut self) {
-        (self.build_function)(self.inputs, self.outputs, &mut self.build_vector) // should submit all nodes internally
+        (self.build_function)(self.inputs, self.outputs, &mut self.build_vector)
+        // should submit all nodes internally
     }
 
     pub fn add_input<T: Sharable, const NIN: usize, const NON: usize>(

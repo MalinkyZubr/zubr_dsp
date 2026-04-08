@@ -8,7 +8,6 @@ use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 use async_trait::async_trait;
 use std::mem;
 
-
 pub struct PipelineNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     step: Box<dyn PipelineStep<I, O, NI>>,
 

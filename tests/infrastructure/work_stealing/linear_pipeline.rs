@@ -35,12 +35,11 @@ mod tests {
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
         )));
-        let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
-                "test_source".to_string(),
-                TestSourceI32::new(test_vec),
-                build_vector.clone(),
-            );
+        let mut source: NodeBuilder<_, _, 0, 1> = NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
+            "test_source".to_string(),
+            TestSourceI32::new(test_vec),
+            build_vector.clone(),
+        );
 
         let (out_send, out_recv) = channel(100);
         let step1: NodeBuilder<_, _, 1, 1> = source
@@ -67,12 +66,11 @@ mod tests {
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
         )));
-        let mut source: NodeBuilder<_, _, 0, 1> =
-            NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
-                "test_source".to_string(),
-                TestSourceI32::new(test_vec),
-                build_vector.clone(),
-            );
+        let mut source: NodeBuilder<_, _, 0, 1> = NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
+            "test_source".to_string(),
+            TestSourceI32::new(test_vec),
+            build_vector.clone(),
+        );
 
         let (out_send, out_recv) = channel(100);
         let step1: NodeBuilder<_, _, 1, 1> = source

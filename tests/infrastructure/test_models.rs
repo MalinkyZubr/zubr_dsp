@@ -1,5 +1,5 @@
-use std::time::Duration;
 use log::{debug, warn};
+use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 use zubr_dsp::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
@@ -146,7 +146,7 @@ impl PipelineStep<i32, i32, 1> for TestLinearI32Mult {
     ) -> Result<(), ()> {
         *input[0].read() *= 2;
         output.swap_st(&mut input[0]);
-        
+
         warn!("INTERNAL LOGGING MULT INPUT: {}", *input[0].read());
         warn!("INTERNAL LOGGING MULT OUTPUT: {}", *output.read());
         Ok(())

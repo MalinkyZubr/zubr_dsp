@@ -150,13 +150,15 @@ where
     }
 }
 
-
 #[cfg(test)]
-mod tests { // must de-ai-ify these tests asap
+mod tests {
+    // must de-ai-ify these tests asap
     use super::*;
 
     // Helper: create BufferArray from array
-    fn buffer_from_array<T: Copy + Default + Sharable, const N: usize>(data: [T; N]) -> BufferArray<T, N> {
+    fn buffer_from_array<T: Copy + Default + Sharable, const N: usize>(
+        data: [T; N],
+    ) -> BufferArray<T, N> {
         let mut buf = BufferArray::new();
         *buf.read_mut() = data;
         buf
@@ -236,8 +238,7 @@ mod tests { // must de-ai-ify these tests asap
         const U: usize = 2;
         const D: usize = 2;
 
-        let mut resampler: Resampler<i32, N, U, D> =
-            Resampler::new(UpsamplingMethod::LeftHandHold);
+        let mut resampler: Resampler<i32, N, U, D> = Resampler::new(UpsamplingMethod::LeftHandHold);
 
         let mut input = [1, 2, 3, 4];
 
@@ -287,8 +288,7 @@ mod tests { // must de-ai-ify these tests asap
         const U: usize = 1;
         const D: usize = 1;
 
-        let mut resampler: Resampler<i32, N, U, D> =
-            Resampler::new(UpsamplingMethod::ZeroFilling);
+        let mut resampler: Resampler<i32, N, U, D> = Resampler::new(UpsamplingMethod::ZeroFilling);
 
         let mut input = [1, 2, 3, 4];
 
