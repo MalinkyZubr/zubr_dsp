@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 #![feature(generic_const_exprs)]
 #![feature(array_try_from_fn)]
+extern crate core;
 
 use crate::pipeline::orchestration_layer::logging::init_stdout_logger;
 use log::Level;
