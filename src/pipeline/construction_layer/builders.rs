@@ -274,8 +274,8 @@ impl<T: Sharable, const NO: usize, const NR: usize> NodeBuilder<T, BufferArray<T
 impl<T: Sharable, const NO: usize, const IBS: usize, const OBS: usize>
     NodeBuilder<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
 where
-    [(); IBS % NO]: Sized,
-    [(); IBS % OBS]: Sized, // the input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); (IBS % NO == 0) as usize - 1]:,
+    [(); (IBS % OBS == 0) as usize - 1]:, // the input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     pub fn submit_interleaved_separator(self) {
         self.build_vector

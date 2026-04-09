@@ -150,8 +150,8 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
 impl<T: Sharable, const NO: usize, const IBS: usize, const OBS: usize>
     BuildingNode<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
 where
-    [(); IBS % NO]: Sized,
-    [(); IBS % OBS]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); (IBS % NO == 0) as usize - 1]:,
+    [(); (IBS % OBS == 0) as usize - 1]:, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     fn into_interleaved_separator(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
         if self.step.is_some() {

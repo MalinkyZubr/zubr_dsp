@@ -13,9 +13,7 @@ const fn max(a: usize, b: usize) -> usize {
     }
 }
 
-pub struct DiscreteConvolution<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
-where
-{
+pub struct DiscreteConvolution<T: Sharable + Num + Sum, const IRS: usize, const IS: usize> {
     impulse_response: BufferArray<T, IRS>,
     internal_buffer: [T; IS],
     window_buffer: [T; IRS],
@@ -40,7 +38,8 @@ impl<T: Sharable + Num + Copy + Sum, const IRS: usize, const IS: usize>
             self.window_buffer.rotate_left(1); // inefficient. Replace with indexing later
             self.window_buffer[end] = *input.get(output_index);
 
-            self.internal_buffer[output_index] = self.window_buffer
+            self.internal_buffer[output_index] = self
+                .window_buffer
                 .iter()
                 .zip(self.impulse_response.read())
                 .map(|(input_sample, window_sample)| *input_sample * *window_sample)
@@ -50,15 +49,13 @@ impl<T: Sharable + Num + Copy + Sum, const IRS: usize, const IS: usize>
 }
 
 impl<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
-    PipelineStep<BufferArray<T, IS>, BufferArray<T, IS>, 1>
-    for DiscreteConvolution<T, IRS, IS>
+    PipelineStep<BufferArray<T, IS>, BufferArray<T, IS>, 1> for DiscreteConvolution<T, IRS, IS>
 {
     fn run_cpu(
         &mut self,
         input: &mut [DataWrapper<BufferArray<T, IS>>; 1],
         output: &mut DataWrapper<BufferArray<T, IS>>,
-    ) -> Result<(), ()>
-    {
+    ) -> Result<(), ()> {
         self.convolve_input(input[0].read());
         mem::swap(output.read().read_mut(), &mut self.internal_buffer);
 
@@ -80,33 +77,34 @@ mod td_convolution_tests {
 
         assert_eq!(td_convolution.impulse_response.read(), &[5, 4, 3, 2, 1]);
         assert_eq!(td_convolution.internal_buffer, [1, 4, 10, 20, 35]);
-        
+
         let mut input = BufferArray::new_with_value([6, 7, 8, 9, 0]);
         td_convolution.convolve_input(&mut input);
-        
+
         assert_eq!(td_convolution.internal_buffer, [50, 65, 80, 95, 100]);
     }
 
     #[test]
     fn test_td_convolution_ir_gt_in() {
-        let mut input = BufferArray::new_with_value([1,3,5]);
-        let impulse_response = BufferArray::new_with_value([29, 1, 58, 30, 99, 8, 50, 90, 220, 250, 29, 1, 58, 30, 99, 8, 50, 90, 220, 250]);
+        let mut input = BufferArray::new_with_value([1, 3, 5]);
+        let impulse_response = BufferArray::new_with_value([
+            29, 1, 58, 30, 99, 8, 50, 90, 220, 250, 29, 1, 58, 30, 99, 8, 50, 90, 220, 250,
+        ]);
 
         let mut td_convolution = super::DiscreteConvolution::new(impulse_response);
         td_convolution.convolve_input(&mut input);
-        
+
         assert_eq!(td_convolution.internal_buffer, [29, 88, 206]);
-        
+
         let mut input = BufferArray::new_with_value([2, 2, 3]);
         td_convolution.convolve_input(&mut input);
-        
-        assert_eq!(td_convolution.internal_buffer, [267 ,539, 660]);
-        
+
+        assert_eq!(td_convolution.internal_buffer, [267, 539, 660]);
+
         let mut input = BufferArray::new_with_value([9, 9, 5]);
         td_convolution.convolve_input(&mut input);
-        
+
         assert_eq!(td_convolution.internal_buffer, [1009, 982, 1720]);
-        
     }
 
     #[test]
@@ -121,7 +119,7 @@ mod td_convolution_tests {
 
         let mut input = BufferArray::new_with_value([6, 7, 8, 9, 0]);
         td_convolution.convolve_input(&mut input);
-        
+
         assert_eq!(td_convolution.internal_buffer, [16, 19, 22, 25, 18])
     }
 }
