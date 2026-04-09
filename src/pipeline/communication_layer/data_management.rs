@@ -89,7 +89,7 @@ impl<T: Sharable, const N: usize> BufferArray<T, N> {
     pub fn len(&self) -> usize {
         N
     }
-    
+
     pub fn reverse(&mut self) {
         self.val.reverse();
     }
