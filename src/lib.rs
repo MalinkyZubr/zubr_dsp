@@ -1,4 +1,5 @@
 #![feature(trait_alias)]
+#![feature(lazy_type_alias)]
 #![feature(mpmc_channel, portable_simd, test)]
 #![feature(adt_const_params)]
 #![allow(dead_code)]

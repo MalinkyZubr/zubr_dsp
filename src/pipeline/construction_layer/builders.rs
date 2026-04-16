@@ -1,5 +1,5 @@
 use crate::pipeline::communication_layer::comms_core::{
-    channel_wrapped, WrappedReceiver, WrappedSender,
+    channel_wrapped, WrappedReceiver,
 };
 use crate::pipeline::communication_layer::data_management::BufferArray;
 use crate::pipeline::construction_layer::node_builder::{BuildingNode, PipelineBuildVector};
@@ -274,8 +274,8 @@ impl<T: Sharable, const NO: usize, const NR: usize> NodeBuilder<T, BufferArray<T
 impl<T: Sharable, const NO: usize, const IBS: usize, const OBS: usize>
     NodeBuilder<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
 where
-    [(); (IBS % NO == 0) as usize - 1]:,
-    [(); (IBS % OBS == 0) as usize - 1]:, // the input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); (IBS % NO == 0) as usize - 1]: Sized,
+    [(); (IBS % OBS == 0) as usize - 1]: Sized, // the input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     pub fn submit_interleaved_separator(self) {
         self.build_vector

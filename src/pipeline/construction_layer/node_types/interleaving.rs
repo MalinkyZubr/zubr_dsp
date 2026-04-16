@@ -2,7 +2,7 @@ use crate::pipeline::communication_layer::comms_core::{WrappedReceiver, WrappedS
 use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use log::{debug, error, warn};
+use log::{debug, error};
 use std::mem;
 
 pub struct PipelineInterleavedSeparator<
@@ -11,8 +11,8 @@ pub struct PipelineInterleavedSeparator<
     const INPUT_BUFFER_SIZE: usize,
     const OUTPUT_BUFFER_SIZE: usize,
 > where
-    [(); (INPUT_BUFFER_SIZE % NUM_CHANNELS == 0) as usize - 1]:,
-    [(); (INPUT_BUFFER_SIZE % OUTPUT_BUFFER_SIZE == 0) as usize - 1]:, // input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); (INPUT_BUFFER_SIZE % NUM_CHANNELS == 0) as usize - 1]: Sized,
+    [(); (INPUT_BUFFER_SIZE % OUTPUT_BUFFER_SIZE == 0) as usize - 1]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     // need to have a builder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<BufferArray<I, INPUT_BUFFER_SIZE>>,
@@ -29,7 +29,8 @@ impl<
         const OUTPUT_BUFFER_SIZE: usize,
     > PipelineInterleavedSeparator<I, NUM_CHANNELS, INPUT_BUFFER_SIZE, OUTPUT_BUFFER_SIZE>
 where
-    [(); (INPUT_BUFFER_SIZE % OUTPUT_BUFFER_SIZE == 0) as usize - 1]:, [(); (INPUT_BUFFER_SIZE % NUM_CHANNELS == 0) as usize - 1]: // input buffer size should be perfectly divisible by NUM_CHANNELS
+    [(); (INPUT_BUFFER_SIZE % OUTPUT_BUFFER_SIZE == 0) as usize - 1]: Sized,
+    [(); (INPUT_BUFFER_SIZE % NUM_CHANNELS == 0) as usize - 1]: Sized, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
     pub fn new(
         input: WrappedReceiver<BufferArray<I, INPUT_BUFFER_SIZE>>,
@@ -53,7 +54,10 @@ impl<
         const INPUT_BUFFER_SIZE: usize,
         const OUTPUT_BUFFER_SIZE: usize,
     > CollectibleNode
-    for PipelineInterleavedSeparator<I, NUM_CHANNELS, INPUT_BUFFER_SIZE, OUTPUT_BUFFER_SIZE> where [(); (INPUT_BUFFER_SIZE % OUTPUT_BUFFER_SIZE == 0) as usize - 1]:, [(); (INPUT_BUFFER_SIZE % NUM_CHANNELS == 0) as usize - 1]:
+    for PipelineInterleavedSeparator<I, NUM_CHANNELS, INPUT_BUFFER_SIZE, OUTPUT_BUFFER_SIZE>
+where
+    [(); (INPUT_BUFFER_SIZE % OUTPUT_BUFFER_SIZE == 0) as usize - 1]: Sized,
+    [(); (INPUT_BUFFER_SIZE % NUM_CHANNELS == 0) as usize - 1]: Sized,
 {
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
         let mut num_satiated_edges = 0;

@@ -1,5 +1,6 @@
 pub mod core;
-pub mod fft;
 pub mod sampling;
-mod system_response;
+pub mod system_response;
+pub mod filtering;
+pub mod modulation;
 //pub mod system_response;

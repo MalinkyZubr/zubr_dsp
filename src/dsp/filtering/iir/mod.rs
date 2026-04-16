@@ -2,5 +2,4 @@ pub mod shared;
 //pub mod bessel;
 pub mod butterworth;
 //pub mod elliptic;
-//pub mod chebyshev;
-pub mod tests;
+//pub mod chebyshev

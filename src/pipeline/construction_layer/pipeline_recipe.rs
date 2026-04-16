@@ -57,7 +57,7 @@ impl<T: Sharable> RecipeOutputMapping<T> {
     }
 }
 
-type BuildFunction<I: Sharable, O: Sharable, const NI: usize, const NO: usize> = fn(
+pub type BuildFunction<I: Sharable, O: Sharable, const NI: usize, const NO: usize> = fn(
     [RecipeInputMapping<I>; NI],
     [RecipeOutputMapping<O>; NO],
     &mut Rc<RefCell<PipelineBuildVector>>,

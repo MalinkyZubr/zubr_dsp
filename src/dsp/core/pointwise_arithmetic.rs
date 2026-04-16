@@ -4,25 +4,25 @@ use crate::pipeline::construction_layer::pipeline_traits::*;
 use num::Num;
 use std::iter::Sum;
 
-pub struct PointwiseAdder<const BufferSize: usize> {}
-impl<const BufferSize: usize> PointwiseAdder<BufferSize> {
+pub struct PointwiseAdder<const BUFFER_SIZE: usize> {}
+impl<const BUFFER_SIZE: usize> PointwiseAdder<BUFFER_SIZE> {
     pub fn new() -> Self {
         Self {}
     }
 }
 impl<
-        T: Sharable + Num + Sum + std::ops::AddAssign<T>,
-        const BufferSize: usize,
+        T: Sharable + Num + Sum + std::ops::AddAssign<T> + Copy,
+        const BUFFER_SIZE: usize,
         const NI: usize,
-    > PipelineStep<BufferArray<T, BufferSize>, BufferArray<T, BufferSize>, NI>
-    for PointwiseAdder<BufferSize>
+    > PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    for PointwiseAdder<BUFFER_SIZE>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BufferSize>>; NI],
-        output: &mut DataWrapper<BufferArray<T, BufferSize>>,
+        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; NI],
+        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
     ) -> Result<(), ()> {
-        for idx in 0..BufferSize {
+        for idx in 0..BUFFER_SIZE {
             for input_channel in 0..NI {
                 *output.read().get_mut(idx) += *input[input_channel].read().get(idx);
             }
@@ -31,22 +31,22 @@ impl<
     }
 }
 
-pub struct PointwiseSubtractor<const BufferSize: usize> {}
-impl<const BufferSize: usize> PointwiseSubtractor<BufferSize> {
+pub struct PointwiseSubtractor<const BUFFER_SIZE: usize> {}
+impl<const BUFFER_SIZE: usize> PointwiseSubtractor<BUFFER_SIZE> {
     pub fn new() -> Self {
         Self {}
     }
 }
-impl<T: Sharable + Num + std::ops::SubAssign<T>, const BufferSize: usize, const NI: usize>
-    PipelineStep<BufferArray<T, BufferSize>, BufferArray<T, BufferSize>, NI>
-    for PointwiseSubtractor<BufferSize>
+impl<T: Sharable + Num + std::ops::SubAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
+    PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    for PointwiseSubtractor<BUFFER_SIZE>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BufferSize>>; NI],
-        output: &mut DataWrapper<BufferArray<T, BufferSize>>,
+        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; NI],
+        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
     ) -> Result<(), ()> {
-        for idx in 0..BufferSize {
+        for idx in 0..BUFFER_SIZE {
             for input_channel in 0..NI {
                 *output.read().get_mut(idx) -= *input[input_channel].read().get(idx);
             }
@@ -55,22 +55,22 @@ impl<T: Sharable + Num + std::ops::SubAssign<T>, const BufferSize: usize, const 
     }
 }
 
-pub struct PointwiseMultiplier<const BufferSize: usize> {}
-impl<const BufferSize: usize> PointwiseMultiplier<BufferSize> {
+pub struct PointwiseMultiplier<const BUFFER_SIZE: usize> {}
+impl<const BUFFER_SIZE: usize> PointwiseMultiplier<BUFFER_SIZE> {
     pub fn new() -> Self {
         Self {}
     }
 }
-impl<T: Sharable + Num + std::ops::MulAssign<T>, const BufferSize: usize, const NI: usize>
-    PipelineStep<BufferArray<T, BufferSize>, BufferArray<T, BufferSize>, NI>
-    for PointwiseMultiplier<BufferSize>
+impl<T: Sharable + Num + std::ops::MulAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
+    PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    for PointwiseMultiplier<BUFFER_SIZE>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BufferSize>>; NI],
-        output: &mut DataWrapper<BufferArray<T, BufferSize>>,
+        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; NI],
+        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
     ) -> Result<(), ()> {
-        for idx in 0..BufferSize {
+        for idx in 0..BUFFER_SIZE {
             for input_channel in 0..NI {
                 *output.read().get_mut(idx) *= *input[input_channel].read().get(idx);
             }
@@ -79,22 +79,22 @@ impl<T: Sharable + Num + std::ops::MulAssign<T>, const BufferSize: usize, const 
     }
 }
 
-pub struct PointwiseDivider<const BufferSize: usize> {}
-impl<const BufferSize: usize> PointwiseDivider<BufferSize> {
+pub struct PointwiseDivider<const BUFFER_SIZE: usize> {}
+impl<const BUFFER_SIZE: usize> PointwiseDivider<BUFFER_SIZE> {
     pub fn new() -> Self {
         Self {}
     }
 }
-impl<T: Sharable + Num + std::ops::DivAssign<T>, const BufferSize: usize, const NI: usize>
-    PipelineStep<BufferArray<T, BufferSize>, BufferArray<T, BufferSize>, NI>
-    for PointwiseDivider<BufferSize>
+impl<T: Sharable + Num + std::ops::DivAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
+    PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    for PointwiseDivider<BUFFER_SIZE>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BufferSize>>; NI],
-        output: &mut DataWrapper<BufferArray<T, BufferSize>>,
+        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; NI],
+        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
     ) -> Result<(), ()> {
-        for idx in 0..BufferSize {
+        for idx in 0..BUFFER_SIZE {
             for input_channel in 0..NI {
                 *output.read().get_mut(idx) /= *input[input_channel].read().get(idx);
             }

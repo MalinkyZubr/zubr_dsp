@@ -12,7 +12,7 @@ pub enum UpsamplingMethod {
     ZeroFilling,
 }
 impl UpsamplingMethod {
-    pub fn to_function<T: Num + Sharable + NumCast>(mut self) -> fn(&T, &T, &mut [T]) {
+    pub fn to_function<T: Num + Sharable + NumCast>(self) -> fn(&T, &T, &mut [T]) {
         match self {
             Self::LinearInterpolation => linear_interpolation,
             Self::NearestNeighbor => nearest_neighbor,
@@ -44,19 +44,19 @@ fn nearest_neighbor<T: Num + NumCast + Copy + Clone>(p1: &T, p2: &T, interp_wind
     }
 }
 
-fn zero_filling<T: Num + NumCast + Copy + Clone>(p1: &T, p2: &T, interp_window: &mut [T]) {
+fn zero_filling<T: Num + NumCast + Copy + Clone>(_p1: &T, _p2: &T, interp_window: &mut [T]) {
     for val in interp_window.iter_mut() {
         *val = NumCast::from(0).unwrap();
     }
 }
 
-fn left_hand_hold<T: Num + NumCast + Copy + Clone>(p1: &T, p2: &T, interp_window: &mut [T]) {
+fn left_hand_hold<T: Num + NumCast + Copy + Clone>(p1: &T, _p2: &T, interp_window: &mut [T]) {
     for val in interp_window.iter_mut() {
         *val = *p1;
     }
 }
 
-fn right_hand_hold<T: Num + NumCast + Copy + Clone>(p1: &T, p2: &T, interp_window: &mut [T]) {
+fn right_hand_hold<T: Num + NumCast + Copy + Clone>(_p1: &T, p2: &T, interp_window: &mut [T]) {
     for val in interp_window.iter_mut() {
         *val = *p2;
     }
@@ -64,56 +64,56 @@ fn right_hand_hold<T: Num + NumCast + Copy + Clone>(p1: &T, p2: &T, interp_windo
 
 pub struct Resampler<
     T: Sharable + Num,
-    const BufferSize: usize,
-    const UpsampleFactor: usize,
-    const DecimationFactor: usize,
+    const BUFFER_SIZE: usize,
+    const UPSAMPLE_FACTOR: usize,
+    const DECIMATION_FACTOR: usize,
 > where
-    [(); UpsampleFactor * BufferSize]:,
-    [(); UpsampleFactor * BufferSize / DecimationFactor]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]:,
 {
     upsample_method: fn(&T, &T, &mut [T]),
-    upsample_buffer: [T; UpsampleFactor * BufferSize],
-    decimation_buffer: BufferArray<T, { UpsampleFactor * BufferSize / DecimationFactor }>,
+    upsample_buffer: [T; UPSAMPLE_FACTOR * BUFFER_SIZE],
+    decimation_buffer: BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
 }
 
 impl<
         T: Sharable + Num + NumCast,
-        const BufferSize: usize,
-        const UpsampleFactor: usize,
-        const DecimationFactor: usize,
-    > Resampler<T, BufferSize, UpsampleFactor, DecimationFactor>
+        const BUFFER_SIZE: usize,
+        const UPSAMPLE_FACTOR: usize,
+        const DECIMATION_FACTOR: usize,
+    > Resampler<T, BUFFER_SIZE, UPSAMPLE_FACTOR, DECIMATION_FACTOR>
 where
-    [(); UpsampleFactor * BufferSize]:,
-    [(); UpsampleFactor * BufferSize / DecimationFactor]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]:,
 {
     pub fn new(method: UpsamplingMethod) -> Self {
         Self {
             upsample_method: method.to_function(),
-            upsample_buffer: [T::zero(); { UpsampleFactor * BufferSize }],
+            upsample_buffer: [T::zero(); { UPSAMPLE_FACTOR * BUFFER_SIZE }],
             decimation_buffer: BufferArray::new(),
         }
     }
 
-    fn upsample(&mut self, input_buffer: &mut [T; BufferSize]) {
+    fn upsample(&mut self, input_buffer: &mut [T; BUFFER_SIZE]) {
         mem::swap(&mut input_buffer[0], &mut self.upsample_buffer[0]);
 
-        for idx in 1..BufferSize {
+        for idx in 1..BUFFER_SIZE {
             mem::swap(
                 &mut input_buffer[idx],
-                &mut self.upsample_buffer[idx * UpsampleFactor],
+                &mut self.upsample_buffer[idx * UPSAMPLE_FACTOR],
             );
             (self.upsample_method)(
                 &input_buffer[idx - 1],
                 &input_buffer[idx],
-                &mut self.upsample_buffer[(idx - 1) * UpsampleFactor + 1..idx * UpsampleFactor],
+                &mut self.upsample_buffer[(idx - 1) * UPSAMPLE_FACTOR + 1..idx * UPSAMPLE_FACTOR],
             ); // DO not want to interpolate over existing values
         }
     }
 
     fn decimate(&mut self) {
-        for idx in (0..BufferSize).step_by(DecimationFactor) {
+        for idx in (0..BUFFER_SIZE).step_by(DECIMATION_FACTOR) {
             mem::swap(
-                &mut self.upsample_buffer[idx * UpsampleFactor],
+                &mut self.upsample_buffer[idx * UPSAMPLE_FACTOR],
                 &mut self.decimation_buffer.read_mut()[idx],
             );
         }
@@ -122,24 +122,24 @@ where
 
 impl<
         T: Sharable + Num + NumCast,
-        const BufferSize: usize,
-        const UpsampleFactor: usize,
-        const DecimationFactor: usize,
+        const BUFFER_SIZE: usize,
+        const UPSAMPLE_FACTOR: usize,
+        const DECIMATION_FACTOR: usize,
     >
     PipelineStep<
-        BufferArray<T, BufferSize>,
-        BufferArray<T, { UpsampleFactor * BufferSize / DecimationFactor }>,
+        BufferArray<T, BUFFER_SIZE>,
+        BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
         1,
-    > for Resampler<T, BufferSize, UpsampleFactor, DecimationFactor>
+    > for Resampler<T, BUFFER_SIZE, UPSAMPLE_FACTOR, DECIMATION_FACTOR>
 where
-    [(); UpsampleFactor * BufferSize]:,
-    [(); UpsampleFactor * BufferSize / DecimationFactor]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]:,
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BufferSize>>; 1],
+        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1],
         output: &mut DataWrapper<
-            BufferArray<T, { UpsampleFactor * BufferSize / DecimationFactor }>,
+            BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
         >,
     ) -> Result<(), ()> {
         self.upsample(input[0].read().read_mut());
