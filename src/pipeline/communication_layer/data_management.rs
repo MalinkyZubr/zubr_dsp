@@ -89,6 +89,14 @@ impl<T: Sharable, const N: usize> BufferArray<T, N> {
     pub fn len(&self) -> usize {
         N
     }
+    
+    pub fn mutate(&mut self, index: usize, mut f: impl FnMut(&mut T)) {
+        f(&mut self.val[index]);
+    }
+    
+    pub fn mutate_all(&mut self, f: impl FnMut(&mut T)) {
+        self.val.iter_mut().for_each(f);
+    }
 
     pub fn reverse(&mut self) {
         self.val.reverse();

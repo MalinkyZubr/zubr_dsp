@@ -56,6 +56,7 @@ serial_test = "3.4.0"
 num_cpus = "1.17.0"
 bounded-spsc-queue = "0.4.0"
 nalgebra = "0.34.2"
+num-traits = "0.2.19"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
