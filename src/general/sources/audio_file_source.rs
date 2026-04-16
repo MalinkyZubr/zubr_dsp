@@ -1,7 +1,6 @@
-use crate::pipeline::construction_layer::sources::audio_file_source::AudioReadResult::EOF;
-use crate::pipeline::interfaces::ODFormat;
-use crate::pipeline::interfaces::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_traits::Source;
+use crate::pipeline::communication_layer::data_management::*;
+use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
+use crate::pipeline::construction_layer::pipeline_traits::*;
 use std::fs::File;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::Decoder;
@@ -10,11 +9,6 @@ use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-/*
-1. empty the output vector in buffer_size increments
-2. every time falls below the threshold, read anotehr packet and append to the buffer as a vector
-
- */
 
 enum AudioReadResult {
     Ok(Vec<f32>),
@@ -22,63 +16,61 @@ enum AudioReadResult {
     Error,
 }
 
-pub struct AudioFileSource {
-    buffer_size: usize,
+pub struct AudioFileSource<const BUFFER_SIZE: usize> {
+    filename: String,
     decoder: Box<dyn Decoder>,
     formatter: Box<dyn FormatReader>,
     read_retries: usize,
-    pub buffer: Vec<f32>,
-    eof_flag: bool,
+    overflow_buffer: Vec<f32>,
 }
 
-impl AudioFileSource {
-    pub fn new(filename: &str, buffer_size: usize, read_retries: usize) -> Self {
-        let file = Box::new(File::open(filename.to_string()).unwrap());
-
-        // Create the media source stream using the boxed media source from above.
+impl<const BUFFER_SIZE: usize> AudioFileSource<BUFFER_SIZE> {
+    pub fn new(filename: &str, read_retries: usize) -> Self {
+        let (decoder, formatter) = Self::create_audio_context(filename);
+        
+        Self {
+            filename: filename.to_string(),
+            decoder,
+            formatter,
+            read_retries,
+            overflow_buffer: Vec::new(),
+        }
+    }
+    
+    fn create_audio_context(filename: &str) -> (Box<dyn Decoder>, Box<dyn FormatReader>) {
+        let file = Box::new(File::open(filename).unwrap());
         let mss = MediaSourceStream::new(file, Default::default());
-
-        // Create a hint to help the format registry guess what format reader is appropriate. In this
-        // example we'll leave it empty.
         let hint = Hint::new();
-
-        // Use the default options when reading and decoding.
         let format_opts: FormatOptions = Default::default();
         let metadata_opts: MetadataOptions = Default::default();
         let decoder_opts: DecoderOptions = Default::default();
 
-        // Probe the media source stream for a format.
         let probed = symphonia::default::get_probe()
             .format(&hint, mss, &format_opts, &metadata_opts)
             .unwrap();
 
-        // Get the format reader yielded by the probe operation.
-        let mut format = probed.format;
-
-        // Get the default track.
+        let format = probed.format;
         let track = format.default_track().unwrap();
-
-        // Create a decoder for the track.
-        let mut decoder = symphonia::default::get_codecs()
+        let decoder = symphonia::default::get_codecs()
             .make(&track.codec_params, &decoder_opts)
             .unwrap();
 
-        Self {
-            buffer_size,
-            decoder,
-            formatter: format,
-            buffer: Vec::new(),
-            read_retries,
-            eof_flag: false,
-        }
+        (decoder, format)
     }
-    fn extract_packet(&mut self) -> AudioReadResult {
+    
+    fn restart_file(&mut self) {
+        let (new_decoder, new_formatter) = Self::create_audio_context(&self.filename);
+        self.decoder = new_decoder;
+        self.formatter = new_formatter;
+    }
+
+    fn extract_packet(&mut self) -> AudioReadResult { // super inefficient due to allocations but ill deal with that later. Silly memory usage
         let mut internal_buffer = None;
         let packet = self.formatter.next_packet();
 
         let packet = match packet {
             Ok(packet) => packet,
-            Err(err) => return EOF,
+            Err(_) => return AudioReadResult::EOF,
         };
 
         match self.decoder.decode(&packet) {
@@ -93,43 +85,56 @@ impl AudioFileSource {
                 }
 
                 let vectorized_buffer = internal_buffer.unwrap().samples().to_vec();
-
                 AudioReadResult::Ok(vectorized_buffer)
             }
             Err(_) => AudioReadResult::Error,
         }
     }
 }
-impl PipelineStep<(), Vec<f32>> for AudioFileSource {
-    fn run_DISO(&mut self) -> Result<ODFormat<Vec<f32>>, String> {
-        let mut error_count = 0;
 
-        if self.eof_flag {
-            return Err("EOF reached".to_string());
-        }
-        while self.buffer.len() < self.buffer_size && error_count < self.read_retries {
+impl<const BUFFER_SIZE: usize> PipelineStep<(), BufferArray<f32, BUFFER_SIZE>, 0> 
+    for AudioFileSource<BUFFER_SIZE> 
+{
+    fn run_cpu(
+        &mut self,
+        _input: &mut [DataWrapper<()>; 0],
+        output: &mut DataWrapper<BufferArray<f32, BUFFER_SIZE>>,
+    ) -> Result<(), ()> {
+        let mut error_count = 0;
+        let mut start_index = 0;
+        
+        output.read().read_mut().copy_from_slice(self.overflow_buffer.as_slice());
+        start_index = self.overflow_buffer.len();
+        
+        while start_index < BUFFER_SIZE && error_count < self.read_retries {
             match self.extract_packet() {
                 AudioReadResult::Error => error_count += 1,
-                EOF => break,
+                AudioReadResult::EOF => {
+                    // Restart the file when EOF is reached
+                    self.restart_file();
+                    error_count = 0; // Reset error count after restart
+                }
                 AudioReadResult::Ok(packet_data) => {
-                    self.buffer.extend(packet_data);
+                    let slice = &mut output.read().read_mut()[start_index..packet_data.len() + start_index];
+                    slice.copy_from_slice(&packet_data.as_slice()[..BUFFER_SIZE - start_index]);
+                    
+                    if BUFFER_SIZE - start_index < packet_data.len() {
+                        self.overflow_buffer.copy_from_slice(&packet_data.as_slice()[BUFFER_SIZE - start_index..]);
+                        start_index = BUFFER_SIZE;
+                    }
+                    
                     error_count = 0;
                 }
             }
         }
-        if error_count > self.read_retries {
-            Err("Error in reading from audio file".to_string())
-        } else if self.buffer.len() >= self.buffer_size {
-            let to_return = self.buffer.drain(0..self.buffer_size).collect();
-            Ok(ODFormat::Standard(to_return))
-        } else {
-            let mut to_return: Vec<f32> = self.buffer.drain(0..self.buffer.len()).collect();
-            to_return.extend(vec![0.0; self.buffer_size - to_return.len()]);
 
-            self.eof_flag = true;
-
-            Ok(ODFormat::Standard(to_return))
+        if error_count >= self.read_retries {
+            return Err(());
         }
+
+        Ok(())
     }
 }
-impl Source for AudioFileSource {}
+
+
+impl<const BUFFER_SIZE: usize> Source for AudioFileSource<BUFFER_SIZE> {}
