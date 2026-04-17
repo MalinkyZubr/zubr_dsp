@@ -6,11 +6,17 @@ use num::Num;
 use num_traits::{cast, NumCast};
 use std::ops::MulAssign;
 
-pub struct IntoAnalytic {}
+pub struct IntoAnalytic<const BufferSize: usize> {}
 
+
+impl<const BufferSize: usize> IntoAnalytic<BufferSize> {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl<T: Num + NumCast + Sharable, const BufferSize: usize>
     PipelineStep<BufferArray<Complex<T>, BufferSize>, BufferArray<Complex<T>, BufferSize>, 1>
-    for IntoAnalytic
+    for IntoAnalytic<BufferSize>
 where
     Complex<T>: MulAssign<Complex<T>>,
 {

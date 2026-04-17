@@ -1,3 +1,3 @@
 //pub mod psk;
 
-mod am;
+pub mod am;

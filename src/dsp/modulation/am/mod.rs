@@ -1,2 +1,2 @@
-mod am_mod;
-mod am_demod;
+pub mod am_mod;
+pub mod am_demod;

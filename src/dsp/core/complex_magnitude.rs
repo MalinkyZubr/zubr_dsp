@@ -8,7 +8,11 @@ use std::ops::MulAssign;
 
 
 pub struct ComplexMagnitude {}
-
+impl ComplexMagnitude {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl <T: Sharable + Num + NumCast + Float, const BufferSize: usize> PipelineStep<BufferArray<Complex<T>, BufferSize>, BufferArray<T, BufferSize>, 1> for ComplexMagnitude {
     fn run_cpu(

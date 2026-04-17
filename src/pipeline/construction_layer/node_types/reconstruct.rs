@@ -5,6 +5,7 @@ use crate::pipeline::communication_layer::data_management::{BufferArray, DataWra
 use crate::pipeline::construction_layer::node_types::node_traits::{CollectibleNode, RunModel};
 use crate::pipeline::construction_layer::pipeline_traits::Sharable;
 
+
 pub struct PipelineSeriesReconstructor<I: Sharable, const NO: usize, const NR: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
     input: WrappedReceiver<I>,
