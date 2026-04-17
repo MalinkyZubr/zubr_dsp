@@ -13,7 +13,7 @@ use std::sync::Once;
 
 pub mod dsp;
 pub mod pipeline;
-mod general;
+pub mod general;
 
 static INIT: Once = Once::new();
 

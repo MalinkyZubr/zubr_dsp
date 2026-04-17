@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use crate::pipeline::communication_layer::data_management::*;
 use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
 use crate::pipeline::construction_layer::pipeline_traits::*;
@@ -21,7 +22,7 @@ pub struct AudioFileSource<const BUFFER_SIZE: usize> {
     decoder: Box<dyn Decoder>,
     formatter: Box<dyn FormatReader>,
     read_retries: usize,
-    overflow_buffer: Vec<f32>,
+    overflow_buffer: VecDeque<f32>,
 }
 
 impl<const BUFFER_SIZE: usize> AudioFileSource<BUFFER_SIZE> {
@@ -33,7 +34,7 @@ impl<const BUFFER_SIZE: usize> AudioFileSource<BUFFER_SIZE> {
             decoder,
             formatter,
             read_retries,
-            overflow_buffer: Vec::new(),
+            overflow_buffer: VecDeque::new(),
         }
     }
     
@@ -102,9 +103,13 @@ impl<const BUFFER_SIZE: usize> PipelineStep<(), BufferArray<f32, BUFFER_SIZE>, 0
     ) -> Result<(), ()> {
         let mut error_count = 0;
         let mut start_index = 0;
-        
-        output.read().read_mut().copy_from_slice(self.overflow_buffer.as_slice());
-        start_index = self.overflow_buffer.len();
+
+        let overflow_size = self.overflow_buffer.len();
+
+        while start_index < BUFFER_SIZE && start_index < overflow_size {
+            output.read().set(start_index, self.overflow_buffer.pop_front().unwrap());
+            start_index += 1;
+        }
         
         while start_index < BUFFER_SIZE && error_count < self.read_retries {
             match self.extract_packet() {
@@ -114,13 +119,21 @@ impl<const BUFFER_SIZE: usize> PipelineStep<(), BufferArray<f32, BUFFER_SIZE>, 0
                     self.restart_file();
                     error_count = 0; // Reset error count after restart
                 }
-                AudioReadResult::Ok(packet_data) => {
-                    let slice = &mut output.read().read_mut()[start_index..packet_data.len() + start_index];
-                    slice.copy_from_slice(&packet_data.as_slice()[..BUFFER_SIZE - start_index]);
-                    
+                AudioReadResult::Ok(packet_data) => { ///home/malinkyzubr/Documents/GitHub/ZubrDSP/examples/basic/GlavnoyeRebyata.mp3
+                    if packet_data.len() == 0 {
+                        panic!("Packet data is empty");
+                    }
                     if BUFFER_SIZE - start_index < packet_data.len() {
-                        self.overflow_buffer.copy_from_slice(&packet_data.as_slice()[BUFFER_SIZE - start_index..]);
+                        let slice = &mut output.read().read_mut()[start_index..];
+                        slice.copy_from_slice(&packet_data.as_slice()[..BUFFER_SIZE - start_index]);
+
+                        self.overflow_buffer.extend(&packet_data.as_slice()[BUFFER_SIZE - start_index..]);
                         start_index = BUFFER_SIZE;
+                    }
+                    else {
+                        let slice = &mut output.read().read_mut()[start_index..packet_data.len() + start_index];
+                        slice.copy_from_slice(&packet_data.as_slice()[..BUFFER_SIZE - start_index]);
+                        start_index += packet_data.len();
                     }
                     
                     error_count = 0;

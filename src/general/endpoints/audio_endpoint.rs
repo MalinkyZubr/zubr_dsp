@@ -12,11 +12,10 @@ pub struct AudioSink<const BUFFER_SIZE: usize> {
     sink: Option<RodioSink>,
     sample_rate: SampleRate,
     channels: ChannelCount,
-    detach_on_kill: bool,
 }
 
 impl<const BUFFER_SIZE: usize> AudioSink<BUFFER_SIZE> {
-    pub fn new(channels: u16, sample_rate: u32, sink: RodioSink, detach_on_kill: bool) -> Self {
+    pub fn new(channels: u16, sample_rate: u32, sink: RodioSink) -> Self {
         let _ = set_current_thread_priority(ThreadPriority::Max);
         let sample_rate = SampleRate::from(sample_rate);
         let channels = ChannelCount::from(channels);
@@ -25,7 +24,6 @@ impl<const BUFFER_SIZE: usize> AudioSink<BUFFER_SIZE> {
             sink: Some(sink),
             sample_rate,
             channels,
-            detach_on_kill,
         }
     }
 }

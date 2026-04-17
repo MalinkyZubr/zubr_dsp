@@ -5,4 +5,4 @@
 // mod rodio_source;
 
 pub mod audio_endpoint;
-mod rodio_source;
+pub mod rodio_source;
