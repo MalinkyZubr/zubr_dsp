@@ -19,7 +19,9 @@ where
     pub fn new_with_value(value: T) -> Self {
         DataWrapper { value }
     }
-
+    pub fn read_immut(&self) -> &T {
+        &self.value
+    }
     pub fn read(&mut self) -> &mut T {
         &mut self.value
     }

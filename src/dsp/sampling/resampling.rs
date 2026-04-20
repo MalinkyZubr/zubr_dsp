@@ -67,12 +67,10 @@ pub struct Resampler<
     const BUFFER_SIZE: usize,
     const UPSAMPLE_FACTOR: usize,
     const DECIMATION_FACTOR: usize,
-> where
-    [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:,
-    [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]:,
+> where [(); {UPSAMPLE_FACTOR * BUFFER_SIZE}]:, [(); { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }]: 
 {
     upsample_method: fn(&T, &T, &mut [T]),
-    upsample_buffer: [T; UPSAMPLE_FACTOR * BUFFER_SIZE],
+    upsample_buffer: [T; {UPSAMPLE_FACTOR * BUFFER_SIZE}],
     decimation_buffer: BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
 }
 
@@ -83,8 +81,8 @@ impl<
         const DECIMATION_FACTOR: usize,
     > Resampler<T, BUFFER_SIZE, UPSAMPLE_FACTOR, DECIMATION_FACTOR>
 where
-    [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:,
-    [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]:,
+    [(); { UPSAMPLE_FACTOR * BUFFER_SIZE }]:,
+    [(); { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }]:,
 {
     pub fn new(method: UpsamplingMethod) -> Self {
         Self {
@@ -209,6 +207,13 @@ mod tests {
     // Resampler tests
     // -----------------------------
 
+    #[test]
+    fn test_creation() {
+        const N: usize = 2048;
+        const U: usize = 1;
+        const D: usize = 64;
+        let mut resampler: Resampler<f32, N, U, D> = Resampler::new(UpsamplingMethod::LinearInterpolation);
+    }
     #[test]
     fn test_upsample_linear() {
         const N: usize = 4;

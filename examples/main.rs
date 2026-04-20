@@ -3,12 +3,14 @@ mod basic;
 use std::collections::HashMap;
 use std::io;
 use basic::audio_test::audio_test;
-
+use basic::am_end_to_end::am_end_to_end_test;
 
 fn main() {
+    unsafe { backtrace_on_stack_overflow::enable() };
     let examples = HashMap::from(
         [
-            ("audio_test",audio_test)
+            ("audio_test",audio_test as fn() -> Result<(), String>),
+            ("am_end_to_end", am_end_to_end_test as fn() -> Result<(), String>)
         ]
     );
 

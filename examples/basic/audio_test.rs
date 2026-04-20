@@ -33,7 +33,7 @@ pub fn audio_test() -> Result<(), String> {
     let sink = Sink::connect_new(stream.mixer());
     let step1: NodeBuilder<_, _, 1, 1> = source
         .attach_standard("test_step".to_string(), Throttle::new(88.2e3))
-        .add_pipeline_sink("test_sink".to_string(), AudioSink::new(2, 40100, sink));
+        .add_pipeline_sink("test_sink".to_string(), AudioSink::new(2, 44100, sink));
 
     source.submit_cpu();
     step1.submit_io();

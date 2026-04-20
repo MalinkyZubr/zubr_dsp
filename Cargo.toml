@@ -58,6 +58,7 @@ bounded-spsc-queue = "0.4.0"
 nalgebra = "0.34.2"
 num-traits = "0.2.19"
 rtl-sdr-rs = "0.3.1"
+backtrace-on-stack-overflow = "0.3.0"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
