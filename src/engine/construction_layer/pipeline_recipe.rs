@@ -2,10 +2,11 @@ use crate::engine::communication_layer::comms_core::{
     channel_wrapped, WrappedReceiver, WrappedSender,
 };
 use crate::engine::construction_layer::pipeline_builder::NodeBuilder;
-use crate::engine::construction_layer::node_builder::PipelineBuildVector;
+
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::engine::construction_layer::build_vector::PipelineBuildVector;
 
 pub struct RecipeInputMapping<T: Sharable> {
     inputs: Vec<WrappedReceiver<T>>,

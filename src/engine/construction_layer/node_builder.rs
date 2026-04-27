@@ -9,52 +9,8 @@ use crate::engine::structural::node_types::reconstruct::PipelineReconstructorNod
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use log::{debug, info};
 use std::collections::HashMap;
+use crate::engine::construction_layer::build_vector::PreparedNode;
 
-#[derive(Clone)]
-pub struct PipelineParameters {
-    pub buff_size: usize,
-}
-impl PipelineParameters {
-    pub fn new(buff_size: usize) -> Self {
-        Self {
-            buff_size: buff_size,
-        }
-    }
-}
-
-pub struct PipelineBuildVector {
-    nodes: Vec<(usize, String, Box<dyn CollectibleNode>)>,
-    parameters: PipelineParameters,
-    id_counter: usize,
-}
-impl PipelineBuildVector {
-    pub fn new(pipeline_parameters: PipelineParameters) -> Self {
-        PipelineBuildVector {
-            nodes: Vec::new(),
-            parameters: pipeline_parameters,
-            id_counter: 0,
-        }
-    }
-    pub fn add_node(&mut self, node: (usize, String, Box<dyn CollectibleNode>)) {
-        info!("Adding node {} {:?}", node.0, node.2.get_run_model());
-        self.nodes.push(node);
-        self.nodes.sort_by(|a, b| a.1.cmp(&b.1))
-    }
-
-    pub fn get_new_id(&mut self) -> usize {
-        let out = self.id_counter;
-        self.id_counter += 1;
-        out
-    }
-
-    pub fn consume(self) -> Vec<(usize, String, Box<dyn CollectibleNode>)> {
-        self.nodes
-    }
-
-    pub fn get_parameters(&self) -> &PipelineParameters {
-        &self.parameters
-    }
-}
 
 pub struct BuildingNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     id: usize,
@@ -112,7 +68,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
         self.initial_state = Some(initial_state);
     }
 
-    fn into_node(mut self, run_model: RunModel) -> PipelineStandardNode<I, O, NI, NO> {
+    fn generate_node(&mut self, run_model: RunModel) -> PipelineStandardNode<I, O, NI, NO> {
         if self.step.is_none() {
             panic!("Cannot convert BuildingNode into CollectibleThread without a step attached")
         }
@@ -121,9 +77,9 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
         debug!("Building node {}, {}", self.id, self.name);
         let new_node: PipelineStandardNode<I, O, NI, NO> = PipelineStandardNode::new(
             step,
-            self.inputs,
-            self.outputs,
-            self.initial_state,
+            self.inputs.drain(..).collect(),
+            self.outputs.drain(..).collect(),
+            self.initial_state.clone(),
             run_model,
         );
 
@@ -132,20 +88,20 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
 }
 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
-    pub fn build_io_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_io_node(&mut self) -> PreparedNode {
         let id = self.id;
         let name = self.name.clone();
-        let new_node = self.into_node(RunModel::IO);
-        (id, name, Box::new(new_node))
-    }
-}
+        let new_node = self.generate_node(RunModel::IO);
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
-    pub fn build_cpu_node(self) -> (usize, String, Box<dyn CollectibleNode>) {
+        PreparedNode::new(Box::new(new_node), id, name)
+    }
+
+    pub fn build_cpu_node(&mut self) -> PreparedNode {
         let id = self.id;
         let name = self.name.clone();
-        let new_node = self.into_node(RunModel::CPU);
-        (id, name, Box::new(new_node))
+        let new_node = self.generate_node(RunModel::CPU);
+
+        PreparedNode::new(Box::new(new_node), id, name)
     }
 }
 
@@ -155,7 +111,7 @@ where
     [(); (IBS % NO == 0) as usize - 1]:,
     [(); (IBS % OBS == 0) as usize - 1]:, // input buffer size should be perfectly divisible by NUM_CHANNELS
 {
-    fn into_interleaved_separator(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    fn into_interleaved_separator(mut self) -> PreparedNode {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
         }
@@ -177,7 +133,7 @@ where
         (self.id, self.name, Box::new(interleaved_separator))
     }
 
-    pub fn build_interleave(self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_interleave(self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -185,7 +141,7 @@ where
     }
 }
 impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, ND>, T, 1, NO> {
-    fn into_series_deconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    fn into_series_deconstructor(mut self) -> PreparedNode {
         assert!(ND <= self.buffer_size, "WARNING! THE DECONSTRUCTOR RELIES ON MPSC BUFFER SIZE! IF IT IS TOO SMALL DECONSTRUCTOR WILL LOCK UP! INCREASE YOUR PIPELINE BUFFER SIZE!");
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -208,7 +164,7 @@ impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, 
         (self.id, self.name, Box::new(deconstructor_separator))
     }
 
-    pub fn build_deconstruct(self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_deconstruct(self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -217,17 +173,18 @@ impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, 
 }
 
 impl<T: Sharable, const NO: usize, const NR: usize> BuildingNode<T, BufferArray<T, NR>, 1, NO> {
-    fn into_series_reconstructor(mut self) -> (usize, String, Box<dyn CollectibleNode>) {
+    fn generate_series_reconstructor(&mut self) -> PreparedNode {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
         }
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
+        let intermediate = self.outputs.drain(..).collect();
         let reconstructor_separator: PipelineReconstructorNode<T, NO, NR> =
             PipelineReconstructorNode::new(
                 self.inputs.remove(0),
-                match self.outputs.try_into() {
+                match intermediate.try_into() {
                     Ok(out) => out,
                     Err(_) => panic!(
                         "Incorrect number of outputs for BuildingNode ID {}",
@@ -236,10 +193,10 @@ impl<T: Sharable, const NO: usize, const NR: usize> BuildingNode<T, BufferArray<
                 },
             );
 
-        (self.id, self.name, Box::new(reconstructor_separator))
+        (self.id, self.name.clone(), Box::new(reconstructor_separator))
     }
 
-    pub fn build_reconstruct(self) -> (usize, String, Box<dyn CollectibleNode>) {
+    pub fn build_reconstruct(self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
