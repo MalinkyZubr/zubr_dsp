@@ -1,7 +1,7 @@
-use crate::pipeline::communication_layer::data_management::*;
-use crate::pipeline::communication_layer::generic_constraints::*;
-use crate::pipeline::construction_layer::node_types::pipeline_step::*;
-use crate::pipeline::construction_layer::pipeline_traits::*;
+use crate::engine::communication_layer::data_management::*;
+use crate::engine::communication_layer::generic_constraints::*;
+use crate::engine::structural::generic_node_operation::*;
+use crate::engine::structural::pipeline_type_traits::*;
 use num::Num;
 
 pub struct OverlapSaveBreaker<
@@ -64,7 +64,7 @@ impl<
         const NUM_CHUNKS: usize,
         const UNPADDED_FILTER_SIZE: usize,
     >
-    PipelineStep<
+    PipelineNodeOp<
         BufferArray<T, INPUT_SIZE>,
         BufferArray<BufferArray<T, OVERLAPPING_BLOCK_SIZE>, NUM_CHUNKS>,
         1,
@@ -160,7 +160,7 @@ impl<
         const NUM_CHUNKS: usize, // the number of chunks to break the input into, each of size OVERLAPPING_BLOCK_SIZE
         const UNPADDED_FILTER_SIZE: usize, // the size of the unpadded filter, the filter size minus however many 0 coe
     >
-    PipelineStep<
+    PipelineNodeOp<
         BufferArray<BufferArray<T, OVERLAPPING_BLOCK_SIZE>, NUM_CHUNKS>,
         BufferArray<T, INPUT_SIZE>,
         1,
@@ -246,7 +246,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::communication_layer::data_management::*;
+    use crate::engine::communication_layer::data_management::*;
 
     #[test]
     fn test_overlap_save_breaker_new() {

@@ -53,7 +53,7 @@ pub fn rectangular_block_encode(input: Vec<u8>) -> Vec<u8> {
     let length = input.len() as usize;
     let row_length: usize = (length).sqrt() as usize;
 
-    if row_length.pow(2) != length { // this should go in the instantiation phase? Dont want this executing every single iteration for high speed pipeline
+    if row_length.pow(2) != length { // this should go in the instantiation phase? Dont want this executing every single iteration for high speed engine
         panic!("The unencoded data must have squarable dimension"); // use a result here instead
         let output: Vec<u8> = Vec::new();
         output

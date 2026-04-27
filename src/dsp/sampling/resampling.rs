@@ -1,6 +1,6 @@
-use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
+use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::structural::pipeline_type_traits::Sharable;
 use num::{Num, NumCast};
 use std::mem;
 
@@ -124,7 +124,7 @@ impl<
         const UPSAMPLE_FACTOR: usize,
         const DECIMATION_FACTOR: usize,
     >
-    PipelineStep<
+    PipelineNodeOp<
         BufferArray<T, BUFFER_SIZE>,
         BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
         1,

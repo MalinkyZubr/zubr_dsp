@@ -1,6 +1,6 @@
-use crate::pipeline::communication_layer::data_management::*;
-use crate::pipeline::construction_layer::node_types::pipeline_step::*;
-use crate::pipeline::construction_layer::pipeline_traits::*;
+use crate::engine::communication_layer::data_management::*;
+use crate::engine::structural::generic_node_operation::*;
+use crate::engine::structural::pipeline_type_traits::*;
 use num::complex::Complex;
 use num::Num;
 use num_traits::{cast, Float, NumCast};
@@ -14,7 +14,7 @@ impl ComplexMagnitude {
     }
 }
 
-impl <T: Sharable + Num + NumCast + Float, const BufferSize: usize> PipelineStep<BufferArray<Complex<T>, BufferSize>, BufferArray<T, BufferSize>, 1> for ComplexMagnitude {
+impl <T: Sharable + Num + NumCast + Float, const BufferSize: usize> PipelineNodeOp<BufferArray<Complex<T>, BufferSize>, BufferArray<T, BufferSize>, 1> for ComplexMagnitude {
     fn run_cpu(
         &mut self,
         input: &mut [DataWrapper<BufferArray<Complex<T>, BufferSize>>; 1],

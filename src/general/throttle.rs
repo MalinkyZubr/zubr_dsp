@@ -1,9 +1,9 @@
 use std::time::Instant;
 use async_trait::async_trait;
-use crate::pipeline::construction_layer::node_types::pipeline_step;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
-use crate::pipeline::communication_layer::data_management::*;
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
+use crate::engine::structural::generic_node_operation;
+use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::communication_layer::data_management::*;
+use crate::engine::structural::generic_node_operation::PipelineNodeOp;
 use tokio::time::{sleep, Duration};
 
 pub struct Throttle<const BUFFER_SIZE: usize> {
@@ -24,7 +24,7 @@ impl<const BUFFER_SIZE: usize> Throttle<BUFFER_SIZE> {
 
 
 #[async_trait]
-impl <T: Sharable, const BUFFER_SIZE: usize> PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, 1> for Throttle<BUFFER_SIZE> {
+impl <T: Sharable, const BUFFER_SIZE: usize> PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, 1> for Throttle<BUFFER_SIZE> {
     async fn run_io(&mut self, _input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1], _output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>) -> Result<(), ()> {
         _input[0].swap_st(_output);
         if Instant::now() < self.target {

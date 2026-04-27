@@ -1,6 +1,6 @@
-use crate::pipeline::communication_layer::data_management::*;
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_traits::*;
+use crate::engine::communication_layer::data_management::*;
+use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::structural::pipeline_type_traits::*;
 use num::Num;
 use std::iter::Sum;
 
@@ -14,7 +14,7 @@ impl<
         T: Sharable + Num + Sum + std::ops::AddAssign<T> + Copy,
         const BUFFER_SIZE: usize,
         const NI: usize,
-    > PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    > PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
     for PointwiseAdder<BUFFER_SIZE>
 {
     fn run_cpu(
@@ -38,7 +38,7 @@ impl<const BUFFER_SIZE: usize> PointwiseSubtractor<BUFFER_SIZE> {
     }
 }
 impl<T: Sharable + Num + std::ops::SubAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
-    PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
     for PointwiseSubtractor<BUFFER_SIZE>
 {
     fn run_cpu(
@@ -62,7 +62,7 @@ impl<const BUFFER_SIZE: usize> PointwiseMultiplier<BUFFER_SIZE> {
     }
 }
 impl<T: Sharable + Num + std::ops::MulAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
-    PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
     for PointwiseMultiplier<BUFFER_SIZE>
 {
     fn run_cpu(
@@ -86,7 +86,7 @@ impl<const BUFFER_SIZE: usize> PointwiseDivider<BUFFER_SIZE> {
     }
 }
 impl<T: Sharable + Num + std::ops::DivAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
-    PipelineStep<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
+    PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
     for PointwiseDivider<BUFFER_SIZE>
 {
     fn run_cpu(

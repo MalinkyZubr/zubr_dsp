@@ -50,12 +50,12 @@ mod pipeline_tests {
     #[test]
     fn test_feedback_pipeline_assembly() {
         initialize_logger();
-        // oftentimes it will be easier to contain a feedback loop directly inside of the pipeline step rather than constructing one within the 
+        // oftentimes it will be easier to contain a feedback loop directly inside of the engine step rather than constructing one within the 
         // framework of several steps as shown below. Feedback internal to a step offers finer grained control, and doesnt lose any performance
         // however if you really want supreme super separation of concerns because you're a good engineer feel free to use this for macro scale feedback loops
         // also if you dont want to keep manually reimplementing output feedback logic. Input feedback logic you should do yourself. But that isnt so hard. Is it?
         
-        // can y[n-1] (on the pipeline scale). Mathematically this either means true y[n-1] in the case of a scalar type, or between
+        // can y[n-1] (on the engine scale). Mathematically this either means true y[n-1] in the case of a scalar type, or between
         // y[n - 1], y[n - k] for a k-sized vector type 
         let mut pipeline = ConstructingPipeline::new(3, 1000, 1, 2, 3, 1000);
 

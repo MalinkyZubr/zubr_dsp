@@ -25,7 +25,7 @@ mod end_to_end_tests {
     fn test_audio_lpf_playback() {
         initialize_logger();
 
-        log_message("Staring linear pipeline construction".to_string(), Level::Debug);
+        log_message("Staring linear engine construction".to_string(), Level::Debug);
         
         let lpf_impulse_resp_norm = ImpulseResponse::normalize_to_sum(
             generate_FIR_impulse_response(
@@ -51,7 +51,7 @@ mod end_to_end_tests {
 
         NodeBuilder::start_pipeline(
             "test audio source",
-            AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/pipeline/starstest.wav", 2048, 3),
+            AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/engine/sources/engine/starstest.wav", 2048, 3),
             &mut pipeline)
             .attach("convolution", DiscreteConvolution::new(2048, lpf_impulse_resp_norm.len(), Some(lpf_impulse_resp_norm)))
         .cap_pipeline(

@@ -3,7 +3,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 use zubr_dsp::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
 use zubr_dsp::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use zubr_dsp::pipeline::construction_layer::pipeline_traits::{Sink, Source};
+use zubr_dsp::pipeline::construction_layer::pipeline_traits::{PipelineSink, PipelineSource};
 
 pub struct TestSourceI32<const BS: usize> {
     input_test_vec: BufferArray<i32, BS>,
@@ -41,7 +41,7 @@ impl<const BS: usize> PipelineStep<(), i32, 0> for TestSourceI32<BS> {
     }
 }
 
-impl<const BS: usize> Source for TestSourceI32<BS> {}
+impl<const BS: usize> PipelineSource for TestSourceI32<BS> {}
 
 #[derive(Debug)]
 pub struct TestSinkI32 {
@@ -79,7 +79,7 @@ impl PipelineStep<i32, (), 1> for TestSinkI32 {
     }
 }
 
-impl Sink for TestSinkI32 {}
+impl PipelineSink for TestSinkI32 {}
 
 pub struct TestSourceI32Vec<const BS: usize> {
     input_test_vec: BufferArray<i32, BS>,
@@ -99,7 +99,7 @@ impl<const BS: usize> PipelineStep<(), BufferArray<i32, BS>, 0> for TestSourceI3
         Ok(())
     }
 }
-impl<const BS: usize> Source for TestSourceI32Vec<BS> {}
+impl<const BS: usize> PipelineSource for TestSourceI32Vec<BS> {}
 
 #[derive(Debug)]
 pub struct TestSinkI32Vec<const BS: usize> {
@@ -124,7 +124,7 @@ impl<const BS: usize> PipelineStep<BufferArray<i32, BS>, (), 1> for TestSinkI32V
         Ok(())
     }
 }
-impl<const BS: usize> Sink for TestSinkI32Vec<BS> {}
+impl<const BS: usize> PipelineSink for TestSinkI32Vec<BS> {}
 
 #[derive(Debug)]
 pub struct TestLinearI32Mult {}

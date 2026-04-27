@@ -1,6 +1,6 @@
-use crate::pipeline::communication_layer::data_management::*;
-use crate::pipeline::construction_layer::node_types::pipeline_step::*;
-use crate::pipeline::construction_layer::pipeline_traits::*;
+use crate::engine::communication_layer::data_management::*;
+use crate::engine::structural::generic_node_operation::*;
+use crate::engine::structural::pipeline_type_traits::*;
 use num::Num;
 use std::iter::Sum;
 use std::mem;
@@ -49,7 +49,7 @@ impl<T: Sharable + Num + Copy + Sum, const IRS: usize, const IS: usize>
 }
 
 impl<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
-    PipelineStep<BufferArray<T, IS>, BufferArray<T, IS>, 1> for DiscreteConvolution<T, IRS, IS>
+    PipelineNodeOp<BufferArray<T, IS>, BufferArray<T, IS>, 1> for DiscreteConvolution<T, IRS, IS>
 {
     fn run_cpu(
         &mut self,
@@ -65,7 +65,7 @@ impl<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
 
 #[cfg(test)]
 mod td_convolution_tests {
-    use crate::pipeline::communication_layer::data_management::BufferArray;
+    use crate::engine::communication_layer::data_management::BufferArray;
 
     #[test]
     fn test_td_convolution_ir_eq_in() {

@@ -51,7 +51,7 @@ mod pipeline_tests {
     fn test_multiplexed_pipeline_assembly() {
         initialize_logger();
 
-        log_message("Staring linear pipeline construction".to_string(), Level::Debug);
+        log_message("Staring linear engine construction".to_string(), Level::Debug);
 
         let mut pipeline = ConstructingPipeline::new(3, 1000, 1, 2, 3, 1000);
         let input_pair = mpsc::sync_channel(1);

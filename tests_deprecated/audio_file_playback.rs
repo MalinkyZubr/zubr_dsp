@@ -13,7 +13,7 @@ mod end_to_end_tests {
     fn test_audio_file_playback() {
         initialize_logger();
 
-        log_message("Staring linear pipeline construction".to_string(), Level::Debug);
+        log_message("Staring linear engine construction".to_string(), Level::Debug);
 
         let mut pipeline = ConstructingPipeline::new(3, 1000, 1, 2, 3, 1000);
 
@@ -22,7 +22,7 @@ mod end_to_end_tests {
 
         NodeBuilder::start_pipeline(
             "test audio source",
-            AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/pipeline/sources/pipeline/starstest.wav", 2048, 3),
+            AudioFileSource::new("/home/malinkyzubr/Documents/ZubrDSP/src/engine/sources/engine/starstest.wav", 2048, 3),
             &mut pipeline)
             .cap_pipeline(
             "audio sink", AudioSink::new(1, 40000, sink, true)

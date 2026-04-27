@@ -6,10 +6,10 @@ use tokio::sync::mpsc::channel;
 use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
-use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
-use zubr_dsp::pipeline::construction_layer::node_builder::{PipelineBuildVector, PipelineParameters};
-use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
-use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::work_stealing_full_buffer::build_topographical_thread_pool;
+use zubr_dsp::engine::construction_layer::pipeline_builder::NodeBuilder;
+use zubr_dsp::engine::construction_layer::node_builder::{PipelineBuildVector, PipelineParameters};
+use zubr_dsp::engine::orchestration_layer::pipeline_graph::PipelineGraph;
+use zubr_dsp::engine::orchestration_layer::scheduler_models::work_stealing_full_buffer::build_topographical_thread_pool;
 use rodio::{OutputStream, OutputStreamBuilder, Sink};
 
 
@@ -38,10 +38,11 @@ pub fn audio_test() -> Result<(), String> {
     source.submit_cpu();
     step1.submit_io();
 
-    let graph = Arc::new(PipelineGraph::new(build_vector));
-    let mut handle = build_topographical_thread_pool(4, 1, graph.clone());
-
     let rt = tokio::runtime::Runtime::new().unwrap();
+    
+    let graph = Arc::new(PipelineGraph::new(build_vector));
+    let mut handle = build_topographical_thread_pool(4, 1, graph.clone(), &rt, Some(5));
+    
     handle.start(&rt);
 
     println!("Press enter to stop");

@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
-use crate::pipeline::communication_layer::data_management::*;
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_traits::*;
+use crate::engine::communication_layer::data_management::*;
+use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::structural::pipeline_type_traits::*;
 use std::fs::File;
+use log::error;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::Decoder;
 use symphonia::core::codecs::DecoderOptions;
@@ -93,7 +94,7 @@ impl<const BUFFER_SIZE: usize> AudioFileSource<BUFFER_SIZE> {
     }
 }
 
-impl<const BUFFER_SIZE: usize> PipelineStep<(), BufferArray<f32, BUFFER_SIZE>, 0> 
+impl<const BUFFER_SIZE: usize> PipelineNodeOp<(), BufferArray<f32, BUFFER_SIZE>, 0>
     for AudioFileSource<BUFFER_SIZE> 
 {
     fn run_cpu(
@@ -148,6 +149,3 @@ impl<const BUFFER_SIZE: usize> PipelineStep<(), BufferArray<f32, BUFFER_SIZE>, 0
         Ok(())
     }
 }
-
-
-impl<const BUFFER_SIZE: usize> Source for AudioFileSource<BUFFER_SIZE> {}

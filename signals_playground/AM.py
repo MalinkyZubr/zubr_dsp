@@ -5,8 +5,8 @@ import scipy as scp
 import matplotlib.pyplot as plt
 from numpy import ndarray, dtype
 
-CARRIER_AMPLITUDE = 10
-CARRIER_FREQUENCY = 200
+CARRIER_AMPLITUDE = 1000000
+CARRIER_FREQUENCY = 2500000
 MODULATION_INDEX = 0.99
 SAMPLE_PERIOD = 1 / (2 * CARRIER_FREQUENCY)
 PHASE_INCREMENT = 2 * np.pi * CARRIER_FREQUENCY * SAMPLE_PERIOD
@@ -35,7 +35,7 @@ def am_demod(am_signal: list[float]) -> ndarray[tuple[int, ...], dtype[Any]]:
 
 if __name__ == "__main__":
     time = np.arange(0, 65536) * SAMPLE_PERIOD
-    signal = np.cos(2 * np.pi * 20 * time) # 1 hz sine wave
+    signal = np.cos(2 * np.pi * 44100 * time) # 1 hz sine wave
     am_signal = np.array(am_mod(signal))
     
     am_demod_signal = am_demod(am_signal)

@@ -1,7 +1,8 @@
 #[cfg(test)]
 #[serial_test::serial]
 mod tests {
-    use crate::infrastructure::test_models::{
+    use tokio::runtime::Runtime;
+use crate::infrastructure::test_models::{
         verify_input_output, TestLinearI32Mult, TestSinkI32, TestSinkI32Vec, TestSourceI32Vec,
     };
     use log::{error, Level};
@@ -21,7 +22,7 @@ mod tests {
         build_topographical_thread_pool, ThreadPoolTopographicalHandle,
     };
 
-    fn generate_test_pipeline() -> (
+    fn generate_test_pipeline(async_runtime: &Runtime) -> (
         Arc<PipelineGraph>,
         ThreadPoolTopographicalHandle,
         Receiver<i32>,
@@ -58,7 +59,7 @@ mod tests {
         reconstructor.submit_series_reconstructor();
 
         let graph = Arc::new(PipelineGraph::new(build_vector));
-        let handle = build_topographical_thread_pool(4, 1, graph.clone());
+        let handle = build_topographical_thread_pool(4, 1, graph.clone(), async_runtime, Some(1));
 
         (graph, handle, out_recv_1, out_recv_2)
     }
@@ -70,7 +71,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
-            let (_graph, mut handle, mut receiver1, mut receiver2) = generate_test_pipeline();
+            let (_graph, mut handle, mut receiver1, mut receiver2) = generate_test_pipeline(&rt);
             handle.start(&rt);
             error!("test_linear_pipeline start");
 

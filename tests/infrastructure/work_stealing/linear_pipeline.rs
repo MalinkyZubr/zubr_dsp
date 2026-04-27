@@ -3,7 +3,8 @@ use serial_test::serial;
 #[cfg(test)]
 #[serial]
 mod tests {
-    use crate::infrastructure::test_models::{
+    use tokio::runtime::Runtime;
+use crate::infrastructure::test_models::{
         verify_input_output, TestLinearI32Mult, TestSinkI32, TestSourceI32,
     };
     use std::cell::RefCell;
@@ -24,7 +25,7 @@ mod tests {
         build_topographical_thread_pool, ThreadPoolTopographicalHandle,
     };
 
-    fn generate_test_pipeline_cpu() -> (
+    fn generate_test_pipeline_cpu(async_runtime: &Runtime) -> (
         Arc<PipelineGraph>,
         ThreadPoolTopographicalHandle,
         Receiver<i32>,
@@ -50,12 +51,12 @@ mod tests {
         step1.submit_cpu();
 
         let graph = Arc::new(PipelineGraph::new(build_vector));
-        let handle = build_topographical_thread_pool(4, 1, graph.clone());
+        let handle = build_topographical_thread_pool(4, 1, graph.clone(), async_runtime, None);
 
         (graph, handle, out_recv)
     }
 
-    fn generate_test_pipeline_asynchronous() -> (
+    fn generate_test_pipeline_asynchronous(async_runtime: &Runtime) -> (
         Arc<PipelineGraph>,
         ThreadPoolTopographicalHandle,
         Receiver<i32>,
@@ -81,7 +82,7 @@ mod tests {
         step1.submit_io();
 
         let graph = Arc::new(PipelineGraph::new(build_vector));
-        let handle = build_topographical_thread_pool(4, 1, graph.clone());
+        let handle = build_topographical_thread_pool(4, 1, graph.clone(), async_runtime, None);
 
         (graph, handle, out_recv)
     }
@@ -92,7 +93,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
-            let (_graph, mut handle, mut receiver) = generate_test_pipeline_cpu();
+            let (_graph, mut handle, mut receiver) = generate_test_pipeline_cpu(&rt);
             handle.start(&rt);
             error!("test_linear_pipeline start");
 
@@ -119,7 +120,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
-            let (_graph, mut handle, mut receiver) = generate_test_pipeline_asynchronous();
+            let (_graph, mut handle, mut receiver) = generate_test_pipeline_asynchronous(&rt);
             handle.start(&rt);
             error!("test_linear_pipeline start");
 

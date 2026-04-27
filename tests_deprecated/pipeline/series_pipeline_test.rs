@@ -59,7 +59,7 @@ mod pipeline_tests {
         let input_pair = mpsc::sync_channel(1);
         let (output_sender, output_receiver) = mpsc::channel();
         
-        log_message(format!("Starting pipeline construction"), Level::Debug);
+        log_message(format!("Starting engine construction"), Level::Debug);
         
         NodeBuilder::start_pipeline("Series test source", Dummy1 { receiver: input_pair.1 }, &pipeline)
             .attach("Series Expander", Dummy2b {})
@@ -69,7 +69,7 @@ mod pipeline_tests {
             .cap_pipeline("Series test sink", Dummy3 {sender: output_sender});
 
         let mut pipeline = pipeline.finish_pipeline();
-        log_message(format!("Finished pipeline construction"), Level::Debug);
+        log_message(format!("Finished engine construction"), Level::Debug);
         
         pipeline.start();
         log_message(format!("Pipeline started"), Level::Debug);

@@ -1,5 +1,5 @@
-use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
+use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
+use crate::engine::structural::generic_node_operation::PipelineNodeOp;
 use log::warn;
 use num::Complex;
 use rustfft::{Fft, FftNum, FftPlanner};
@@ -24,7 +24,7 @@ impl<T: FftNum, const BUFFER_SIZE: usize> FFT<T, BUFFER_SIZE> {
     }
 }
 impl<T: FftNum + Default, const BUFFER_SIZE: usize>
-    PipelineStep<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
+    PipelineNodeOp<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
     for FFT<T, BUFFER_SIZE>
 {
     fn run_cpu(
@@ -59,7 +59,7 @@ impl<T: FftNum, const BUFFER_SIZE: usize> IFFT<T, BUFFER_SIZE> {
 
 
 impl<T: FftNum + Default, const BUFFER_SIZE: usize>
-PipelineStep<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
+PipelineNodeOp<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
 for IFFT<T, BUFFER_SIZE>
 {
     fn run_cpu(

@@ -1,6 +1,6 @@
-use crate::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use crate::pipeline::construction_layer::pipeline_traits::Sharable;
+use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
+use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::structural::pipeline_type_traits::Sharable;
 use num::Complex;
 use num::Num;
 use std::mem;
@@ -16,7 +16,7 @@ impl<T: Sharable + Num, const BS: usize> RealToComplex<T, BS> {
     }
 }
 impl<T: Sharable + Num, const BS: usize>
-    PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for RealToComplex<T, BS>
+    PipelineNodeOp<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for RealToComplex<T, BS>
 {
     fn run_cpu(
         &mut self,
@@ -48,7 +48,7 @@ impl<T: Sharable + Num, const BS: usize> ImagToComplex<T, BS> {
     }
 }
 impl<T: Sharable + Num, const BS: usize>
-    PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for ImagToComplex<T, BS>
+    PipelineNodeOp<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 1> for ImagToComplex<T, BS>
 {
     fn run_cpu(
         &mut self,
@@ -80,7 +80,7 @@ impl<T: Sharable + Num, const BS: usize> ComposeComplex<T, BS> {
     }
 }
 impl<T: Sharable + Num, const BS: usize>
-    PipelineStep<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 2> for ComposeComplex<T, BS>
+    PipelineNodeOp<BufferArray<T, BS>, BufferArray<Complex<T>, BS>, 2> for ComposeComplex<T, BS>
 {
     fn run_cpu(
         &mut self,

@@ -2,10 +2,8 @@ use log::{debug, warn};
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
-use zubr_dsp::pipeline::communication_layer::data_management::{BufferArray, DataWrapper};
-use zubr_dsp::pipeline::construction_layer::node_types::pipeline_step::PipelineStep;
-use zubr_dsp::pipeline::construction_layer::pipeline_traits::{Sink, Source};
-
+use zubr_dsp::engine::communication_layer::data_management::{BufferArray, DataWrapper};
+use zubr_dsp::engine::structural::generic_node_operation::{PipelineSink, PipelineSource, PipelineNodeOp};
 pub struct TestSourceI32<const BS: usize> {
     input_test_vec: BufferArray<i32, BS>,
     test_ctr: usize,
@@ -20,7 +18,7 @@ impl<const BS: usize> TestSourceI32<BS> {
     }
 }
 #[async_trait::async_trait]
-impl<const BS: usize> PipelineStep<(), i32, 0> for TestSourceI32<BS> {
+impl<const BS: usize> PipelineNodeOp<(), i32, 0> for TestSourceI32<BS> {
     fn run_cpu(
         &mut self,
         _input: &mut [DataWrapper<()>; 0],
@@ -42,8 +40,6 @@ impl<const BS: usize> PipelineStep<(), i32, 0> for TestSourceI32<BS> {
     }
 }
 
-impl<const BS: usize> Source for TestSourceI32<BS> {}
-
 #[derive(Debug)]
 pub struct TestSinkI32 {
     output_test_sender: Sender<i32>,
@@ -57,7 +53,7 @@ impl TestSinkI32 {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<i32, (), 1> for TestSinkI32 {
+impl PipelineNodeOp<i32, (), 1> for TestSinkI32 {
     fn run_cpu(
         &mut self,
         input: &mut [DataWrapper<i32>; 1],
@@ -80,7 +76,6 @@ impl PipelineStep<i32, (), 1> for TestSinkI32 {
     }
 }
 
-impl Sink for TestSinkI32 {}
 
 pub struct TestSourceI32Vec<const BS: usize> {
     input_test_vec: BufferArray<i32, BS>,
@@ -90,7 +85,7 @@ impl<const BS: usize> TestSourceI32Vec<BS> {
         Self { input_test_vec }
     }
 }
-impl<const BS: usize> PipelineStep<(), BufferArray<i32, BS>, 0> for TestSourceI32Vec<BS> {
+impl<const BS: usize> PipelineNodeOp<(), BufferArray<i32, BS>, 0> for TestSourceI32Vec<BS> {
     fn run_cpu(
         &mut self,
         _input: &mut [DataWrapper<()>; 0],
@@ -101,7 +96,6 @@ impl<const BS: usize> PipelineStep<(), BufferArray<i32, BS>, 0> for TestSourceI3
         Ok(())
     }
 }
-impl<const BS: usize> Source for TestSourceI32Vec<BS> {}
 
 #[derive(Debug)]
 pub struct TestSinkI32Vec<const BS: usize> {
@@ -114,7 +108,7 @@ impl<const BS: usize> TestSinkI32Vec<BS> {
         }
     }
 }
-impl<const BS: usize> PipelineStep<BufferArray<i32, BS>, (), 1> for TestSinkI32Vec<BS> {
+impl<const BS: usize> PipelineNodeOp<BufferArray<i32, BS>, (), 1> for TestSinkI32Vec<BS> {
     fn run_cpu(
         &mut self,
         input: &mut [DataWrapper<BufferArray<i32, BS>>; 1],
@@ -127,7 +121,6 @@ impl<const BS: usize> PipelineStep<BufferArray<i32, BS>, (), 1> for TestSinkI32V
         Ok(())
     }
 }
-impl<const BS: usize> Sink for TestSinkI32Vec<BS> {}
 
 #[derive(Debug)]
 pub struct TestLinearI32Mult {}
@@ -138,7 +131,7 @@ impl TestLinearI32Mult {
 }
 
 #[async_trait::async_trait]
-impl PipelineStep<i32, i32, 1> for TestLinearI32Mult {
+impl PipelineNodeOp<i32, i32, 1> for TestLinearI32Mult {
     fn run_cpu(
         &mut self,
         input: &mut [DataWrapper<i32>; 1],
@@ -171,7 +164,7 @@ impl TestAdder {
 }
 
 #[async_trait::async_trait]
-impl<const N: usize> PipelineStep<i32, i32, N> for TestAdder {
+impl<const N: usize> PipelineNodeOp<i32, i32, N> for TestAdder {
     fn run_cpu(
         &mut self,
         input: &mut [DataWrapper<i32>; N],
