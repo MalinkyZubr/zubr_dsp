@@ -181,6 +181,7 @@ impl<T: Sharable, const NO: usize, const NR: usize> BuildingNode<T, BufferArray<
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
         let intermediate = self.outputs.drain(..).collect();
+        let mut input = self.inputs.remove(0);
         let reconstructor_separator: PipelineReconstructorNode<T, NO, NR> =
             PipelineReconstructorNode::new(
                 self.inputs.remove(0),

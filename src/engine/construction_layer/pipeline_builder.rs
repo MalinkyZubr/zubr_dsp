@@ -1,4 +1,6 @@
-use crate::engine::communication_layer::comms_core::{channel_wrapped, WrappedReceiver};
+use crate::engine::communication_layer::comms_core::{
+    channel_wrapped, WrappedReceiver, WrappedSender,
+};
 use crate::engine::communication_layer::data_management::BufferArray;
 use crate::engine::construction_layer::build_vector::{NodeSubmissionClosure, PipelineBuildVector};
 use crate::engine::construction_layer::node_builder::BuildingNode;
@@ -10,50 +12,91 @@ use crate::engine::structural::pipeline_type_traits::{Sharable, Unit};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[derive(Clone)]
+pub struct PipelineParameters {
+    pub buff_size: usize,
+}
+impl PipelineParameters {
+    pub fn new(buff_size: usize) -> Self {
+        Self {
+            buff_size: buff_size,
+        }
+    }
+}
+
 pub struct NodeBuilder<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     node_predecessor: Rc<RefCell<Option<BuildingNode<I, O, NI, NO>>>>,
     build_vector: Rc<RefCell<PipelineBuildVector>>,
+    pipeline_parameters: PipelineParameters,
 }
 
-fn predecessor_func_wrap<I: Sharable, O: Sharable, RV, const NI: usize, const NO: usize>(
-    predecessor: Rc<RefCell<Option<BuildingNode<I, O, NI, NO>>>>,
+fn node_func_wrap<I: Sharable, O: Sharable, RV, const NI: usize, const NO: usize>(
+    node: Rc<RefCell<Option<BuildingNode<I, O, NI, NO>>>>,
     func: impl FnOnce(&BuildingNode<I, O, NI, NO>) -> RV,
 ) -> RV {
-    match predecessor.borrow().as_ref() {
-        Some(predecessor_internal) => func(predecessor_internal),
+    match node.borrow().as_ref() {
+        Some(node_internal) => func(node_internal),
         None => panic!("Node already consumed by another submission!"),
     }
 }
 
-fn predecessor_func_wrap_mut<I: Sharable, O: Sharable, RV, const NI: usize, const NO: usize>(
-    predecessor: Rc<RefCell<Option<BuildingNode<I, O, NI, NO>>>>,
+fn node_func_wrap_mut<I: Sharable, O: Sharable, RV, const NI: usize, const NO: usize>(
+    node: Rc<RefCell<Option<BuildingNode<I, O, NI, NO>>>>,
     func: impl FnOnce(&mut BuildingNode<I, O, NI, NO>) -> RV,
 ) -> RV {
-    match predecessor.borrow_mut().as_mut() {
-        Some(predecessor_internal) => func(predecessor_internal),
-        None => panic!("Node already consumed by another submission!"),   
+    match node.borrow_mut().as_mut() {
+        Some(node_internal) => func(node_internal),
+        None => panic!("Node already consumed by another submission!"),
     }
 }
 
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, O, NI, NO> {
+    fn internal_channel_generate<T: Sharable>(
+        &self,
+        src: usize,
+        dst: usize,
+    ) -> (WrappedSender<T>, WrappedReceiver<T>) {
+        channel_wrapped::<T>(self.pipeline_parameters.buff_size, src, dst)
+    }
+
+    fn clone_self<IF: Sharable, OF: Sharable, const NIN: usize, const NON: usize>(
+        &self,
+        new_predecessor: Rc<RefCell<Option<BuildingNode<IF, OF, NIN, NON>>>>,
+    ) -> NodeBuilder<IF, OF, NIN, NON> {
+        NodeBuilder {
+            node_predecessor: new_predecessor,
+            build_vector: self.build_vector.clone(),
+            pipeline_parameters: self.pipeline_parameters.clone(),
+        }
+    }
+
+    fn channel_predecessor_attach(&self, dst: usize) -> WrappedReceiver<O> {
+        let receiver = node_func_wrap_mut(self.node_predecessor.clone(), |predecessor| {
+            let (sender, receiver) = channel_wrapped::<O>(
+                self.pipeline_parameters.buff_size,
+                predecessor.get_id(),
+                dst,
+            );
+
+            predecessor.add_output(sender);
+
+            return receiver;
+        });
+
+        receiver
+    }
+
     pub fn get_node_id(&self) -> usize {
-        predecessor_func_wrap(
-            self.node_predecessor.clone(),
-            move |predecessor_internal| {
-                predecessor_internal.get_id()
-            }
-        )
+        node_func_wrap(self.node_predecessor.clone(), move |predecessor_internal| {
+            predecessor_internal.get_id()
+        })
     }
 
     pub fn get_build_vector(&self) -> Rc<RefCell<PipelineBuildVector>> {
         self.build_vector.clone()
     }
 
-    pub fn attach_to_recipe_input(
-        &mut self,
-        dest_id: usize,
-    ) -> WrappedReceiver<O> {
-        
+    pub fn attach_to_recipe_input(&mut self, dest_id: usize) -> WrappedReceiver<O> {
         let (sender, receiver) = channel_wrapped::<O>(
             self.build_vector
                 .borrow_mut()
@@ -67,10 +110,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         receiver
     }
 
-    pub fn attach_to_recipe_output(
-        &mut self,
-        receiver: WrappedReceiver<I>,
-    ) {
+    pub fn attach_to_recipe_output(&mut self, receiver: WrappedReceiver<I>) {
         self.node_predecessor.add_input(receiver);
     }
 
@@ -78,14 +118,19 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
     //
     // }
 
-    fn generate_attach_std_closure<F: Sharable, const NIN: usize, const NON: usize>(
-        node: Rc<RefCell<Option<BuildingNode<O, F, NIN, NON>>>>,
+    fn generate_attach_std_closure<
+        IF: Sharable,
+        OF: Sharable,
+        const NIN: usize,
+        const NON: usize,
+    >(
+        node: Rc<RefCell<Option<BuildingNode<IF, OF, NIN, NON>>>>,
         run_model: RunModel,
     ) -> NodeSubmissionClosure {
-        Box::new(move || match node.borrow_mut() {
+        Box::new(move || match node.borrow_mut().as_mut() {
             Some(node) => match run_model {
-                RunModel::CPU => node.borrow_mut().build_cpu_node(),
-                RunModel::IO => node.borrow_mut().build_io_node(),
+                RunModel::CPU => node.build_cpu_node(),
+                RunModel::IO => node.build_io_node(),
                 _ => panic!("Invalid run model for standard node"),
             },
             None => panic!("Node already consumed by another submission!"),
@@ -100,36 +145,26 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         // attach a step to the selected node (self) and create a thread
         // produce a successor node to continue the engine
         let new_id = self.build_vector.borrow_mut().get_new_id();
-        let buff_size = self
-            .build_vector
-            .borrow()
-            .get_pipeline_parameters()
-            .buff_size;
-        let mut new_node = Rc::new(RefCell::new(BuildingNode::new(name, new_id, buff_size)));
-        new_node.attach_step(Box::new(step));
+
+        let new_node = Rc::new(RefCell::new(Some(BuildingNode::<O, F, NIN, NON>::new(
+            name,
+            new_id,
+            self.pipeline_parameters.buff_size,
+        ))));
+
+        let receiver = self.channel_predecessor_attach(new_id);
 
         let new_node_clone = new_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.add_input(receiver);
+            new_node_in.attach_step(Box::new(step));
+        });
 
-        self.build_vector
-            .borrow_mut()
-            .promise_node(self.generate_attach_std_closure(new_node_clone, run_model));
-
-        let (sender, receiver) = channel_wrapped::<O>(
-            self.build_vector
-                .borrow_mut()
-                .get_pipeline_parameters()
-                .buff_size,
-            self.node_predecessor.get_id(),
-            new_node.get_id(),
+        self.build_vector.borrow_mut().promise_node(
+            NodeBuilder::<O, F, NI, NO>::generate_attach_std_closure(new_node.clone(), run_model),
         );
 
-        self.node_predecessor.add_output(sender);
-        new_node.add_input(receiver);
-
-        NodeBuilder {
-            node_predecessor: new_node,
-            build_vector: self.build_vector.clone(),
-        }
+        self.clone_self(new_node)
     }
 
     pub fn add_pipeline_sink(
@@ -140,25 +175,20 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
     ) -> Self {
         // End a linear engine branch, allowing the step itself to handle output to other parts of the program
         let new_id = self.build_vector.borrow_mut().get_new_id();
-        let buff_size = self
-            .build_vector
-            .borrow()
-            .get_pipeline_parameters()
-            .buff_size;
-        let mut new_node: Rc<RefCell<BuildingNode<O, (), 1, 0>>> =
-            Rc::new(RefCell::new(BuildingNode::new(name, new_id, buff_size)));
-        let (sender, receiver) = channel_wrapped::<O>(
-            self.build_vector
-                .borrow_mut()
-                .get_pipeline_parameters()
-                .buff_size,
-            self.node_predecessor.get_id(),
-            new_node.get_id(),
-        );
-        new_node.attach_step(Box::new(step));
 
-        self.node_predecessor.add_output(sender);
-        new_node.add_input(receiver);
+        let mut new_node: Rc<RefCell<Option<BuildingNode<O, (), 1, 0>>>> =
+            Rc::new(RefCell::new(Some(BuildingNode::new(
+                name,
+                new_id,
+                self.pipeline_parameters.buff_size,
+            ))));
+
+        let receiver = self.channel_predecessor_attach(new_id);
+        let new_node_clone = new_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.add_input(receiver);
+            new_node_in.attach_step(Box::new(step));
+        });
 
         self.build_vector
             .borrow_mut()
@@ -171,12 +201,16 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         name: String,
         step: impl PipelineSink<T, 1> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
+        pipeline_parameters: PipelineParameters,
         running_model: RunModel,
     ) -> NodeBuilder<T, (), 1, 0> {
         let new_id = build_vector.borrow_mut().get_new_id();
-        let buff_size = build_vector.borrow().get_pipeline_parameters().buff_size;
-        let mut new_node = Rc::new(RefCell::new(BuildingNode::new(name, new_id, buff_size)));
-        new_node.attach_step(Box::new(step));
+
+        let mut new_node = Rc::new(RefCell::new(Some(BuildingNode::new(name, new_id, pipeline_parameters.buff_size))));
+        let new_node_clone = new_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.attach_step(Box::new(step));
+        });
 
         build_vector
             .borrow_mut()
@@ -188,6 +222,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         NodeBuilder {
             node_predecessor: new_node,
             build_vector,
+            pipeline_parameters,
         }
     }
 
@@ -195,6 +230,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         name: String,
         source_step: impl PipelineSource<F>,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
+        pipeline_parameters: PipelineParameters,
         running_model: RunModel,
     ) -> NodeBuilder<(), F, 0, NON>
     where
@@ -202,9 +238,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
     {
         // start a engine, allowing the step itself to handle input from other parts of the program
         let new_id = build_vector.borrow_mut().get_new_id();
-        let buff_size = build_vector.borrow().get_pipeline_parameters().buff_size;
-        let mut start_node = Rc::new(RefCell::new(BuildingNode::new(name, new_id, buff_size)));
-        start_node.attach_step(Box::new(source_step));
+        let mut start_node = Rc::new(RefCell::new(Some(BuildingNode::new(name, new_id, pipeline_parameters.buff_size))));
+
+        let new_node_clone = start_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.attach_step(Box::new(source_step));
+        });
+
 
         build_vector
             .borrow_mut()
@@ -215,6 +255,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
 
         NodeBuilder {
             node_predecessor: start_node,
+            pipeline_parameters,
             build_vector,
         }
     }
@@ -223,6 +264,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         name: String,
         step: impl PipelineNodeOp<I, O, NIN> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
+        pipeline_parameters: PipelineParameters,
         run_model: RunModel,
     ) -> NodeBuilder<I, O, NIN, NON>
     where
@@ -230,9 +272,12 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
     {
         // where statement requires that NIN is greater than 1
         let new_id = build_vector.borrow_mut().get_new_id();
-        let buff_size = build_vector.borrow().get_pipeline_parameters().buff_size;
-        let mut new_node = Rc::new(RefCell::new(BuildingNode::new(name, new_id, buff_size)));
-        new_node.attach_step(Box::new(step));
+        let mut new_node = Rc::new(RefCell::new(Some(BuildingNode::new(name, new_id, pipeline_parameters.buff_size))));
+
+        let new_node_clone = new_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.attach_step(Box::new(step));
+        });
 
         build_vector
             .borrow_mut()
@@ -243,6 +288,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
 
         NodeBuilder {
             node_predecessor: new_node,
+            pipeline_parameters,
             build_vector,
         }
     }
@@ -251,13 +297,16 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         name: String,
         step: impl PipelineNodeOp<I, O, 1> + 'static,
         build_vector: Rc<RefCell<PipelineBuildVector>>,
+        pipeline_parameters: PipelineParameters,
         run_model: RunModel,
     ) -> NodeBuilder<I, O, 1, 1> {
         let new_id = build_vector.borrow_mut().get_new_id();
-        let buff_size = build_vector.borrow().get_pipeline_parameters().buff_size;
 
-        let mut new_node = Rc::new(RefCell::new(BuildingNode::new(name, new_id, buff_size)));
-        new_node.attach_step(Box::new(step));
+        let new_node = Rc::new(RefCell::new(Some(BuildingNode::new(name, new_id, pipeline_parameters.buff_size))));
+        let new_node_clone = new_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.attach_step(Box::new(step));
+        });
 
         build_vector
             .borrow_mut()
@@ -269,6 +318,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         NodeBuilder {
             node_predecessor: new_node,
             build_vector: build_vector.clone(),
+            pipeline_parameters,
         }
     }
 
@@ -276,26 +326,20 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         mut self,
         standalone_builder: &mut NodeBuilder<O, F, NIF, NOF>,
     ) -> Self {
-        let (sender, receiver) = channel_wrapped::<O>(
-            self.build_vector
-                .borrow_mut()
-                .get_pipeline_parameters()
-                .buff_size,
-            self.get_node_id(),
-            standalone_builder.get_node_id(),
-        );
+        let receiver = self.channel_predecessor_attach(standalone_builder.get_node_id());
 
-        self.node_predecessor.add_output(sender);
-        standalone_builder.node_predecessor.add_input(receiver);
+        node_func_wrap_mut(standalone_builder.node_predecessor.clone(), |standalone_node| {
+            standalone_node.add_input(receiver);
+        });
 
         self
     }
 
     pub fn add_initial_state(mut self, initial_state: O) -> Self {
         // must perform loop detection at construction time to verify that all loops produce a base value to avoid starting lockups
-        self.node_predecessor
-            .borrow_mut()
-            .add_initial_state(initial_state);
+        node_func_wrap_mut(self.node_predecessor.clone(), |node| {
+            node.add_initial_state(initial_state);
+        });
         self
     }
 
@@ -304,25 +348,16 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> NodeBuilder<I, 
         name: String,
     ) -> NodeBuilder<O, BufferArray<O, ND>, 1, NON> {
         let new_id = self.build_vector.borrow_mut().get_new_id();
-        let buff_size = self
-            .build_vector
-            .borrow()
-            .get_pipeline_parameters()
-            .buff_size;
 
-        let mut new_node = BuildingNode::new(name, new_id, buff_size);
-        let (sender, receiver) = channel_wrapped::<O>(
-            self.build_vector
-                .borrow_mut()
-                .get_pipeline_parameters()
-                .buff_size,
-            self.node_predecessor.get_id(),
-            new_node.get_id(),
-        );
+        let mut new_node = Rc::new(RefCell::new(Some(BuildingNode::new(name, new_id, self.pipeline_parameters.buff_size))));
+        let mut receiver = self.channel_predecessor_attach(new_id);
+        receiver.set_satiation_capacity()
 
-        self.node_predecessor.add_output(sender);
-        new_node.add_input(receiver);
-        new_node.set_required_input_count(ND);
+        let new_node_clone = new_node.clone();
+        node_func_wrap_mut(new_node_clone, |new_node_in| {
+            new_node_in.add_input(receiver);
+            new_node_in.set_required_input_count(ND);
+        });
 
         NodeBuilder {
             node_predecessor: new_node,

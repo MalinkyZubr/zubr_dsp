@@ -16,9 +16,10 @@ pub struct PipelineReconstructorNode<I: Sharable, const NO: usize, const NR: usi
 
 impl<I: Sharable, const NO: usize, const NR: usize> PipelineReconstructorNode<I, NO, NR> {
     pub fn new(
-        input: WrappedReceiver<I>,
+        mut input: WrappedReceiver<I>,
         output: [WrappedSender<BufferArray<I, NR>>; NO],
     ) -> Self {
+        input.set_satiation_capacity(NR);
         Self {
             input,
             output,
