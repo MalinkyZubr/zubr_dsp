@@ -1,4 +1,4 @@
-use crate::engine::structural::generic_pipeline_node::{CollectibleNode, RunModel};
+use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
 use crate::engine::orchestration_layer::pipeline_graph::PipelineGraph;
 use log::info;
 use std::sync::atomic::AtomicBool;
@@ -52,7 +52,7 @@ impl ThreadPoolPerNode {
     }
 
     async fn mutable_state_loop(
-        mut mutable_state: Box<dyn CollectibleNode>,
+        mut mutable_state: Box<dyn GenericNode>,
         id: usize,
         mut run_watcher: WatchReceiver<ThreadOrder>,
     ) {

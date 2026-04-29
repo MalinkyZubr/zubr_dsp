@@ -9,12 +9,12 @@ mod tests {
     use tokio::sync::mpsc::{channel, Receiver};
     use zubr_dsp::initiate_pipeline;
     use zubr_dsp::engine::communication_layer::data_management::BufferArray;
-    use zubr_dsp::engine::construction_layer::pipeline_builder::NodeBuilder;
-    use zubr_dsp::engine::construction_layer::node_builder::{
+    use zubr_dsp::engine::construction_layer::unfinished_node_builder::UnfinishedNodeBuilder;
+    use zubr_dsp::engine::construction_layer::unfinished_node::{
         PipelineBuildVector, PipelineParameters,
     };
     use zubr_dsp::engine::orchestration_layer::pipeline_graph::PipelineGraph;
-    use zubr_dsp::engine::orchestration_layer::scheduler_models::work_stealing_full_buffer::{
+    use zubr_dsp::engine::orchestration_layer::scheduler_models::topographical::{
         build_topographical_thread_pool, ThreadPoolTopographicalHandle,
     };
 
@@ -30,7 +30,7 @@ mod tests {
         let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
             PipelineParameters::new(16),
         )));
-        let mut source: NodeBuilder<_, _, 0, 1> = NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
+        let mut source: UnfinishedNodeBuilder<_, _, 0, 1> = UnfinishedNodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
             "test_source".to_string(),
             TestSourceI32Vec::new(test_vec),
             build_vector.clone(),
@@ -39,7 +39,7 @@ mod tests {
         let (out_send_1, out_recv_1) = channel(100);
         let (out_send_2, out_recv_2) = channel(100);
 
-        let interleaved_separator: NodeBuilder<BufferArray<i32, 8>, BufferArray<i32, 4>, 1, 2> =
+        let interleaved_separator: UnfinishedNodeBuilder<BufferArray<i32, 8>, BufferArray<i32, 4>, 1, 2> =
             source
                 .attach_interleaved_separator::<2>("separator 1".to_string())
                 .add_pipeline_sink(

@@ -48,7 +48,7 @@ pub(crate) fn make_crossbeam_queue_handles<T: Sharable>(
 pub struct WrappedSender<T: Sharable> {
     dest_id: usize,
     is_stopped: bool,
-    backpressure_notify: Arc<Notify>,
+    //backpressure_notify: Arc<Notify>,
     sender: TokioSender<DataWrapper<T>>,
     satiation_capacity: Arc<AtomicUsize>,
     buffer_consumer: Consumer<T>,
@@ -57,7 +57,7 @@ impl<T: Sharable> WrappedSender<T> {
     pub fn new(
         sender: TokioSender<DataWrapper<T>>,
         dest_id: usize,
-        backpressure_notify: Arc<Notify>,
+        //backpressure_notify: Arc<Notify>,
         satiation_capacity: Arc<AtomicUsize>,
         buffer_consumer: Consumer<T>,
     ) -> Self {
@@ -66,7 +66,7 @@ impl<T: Sharable> WrappedSender<T> {
             is_stopped: true,
             dest_id,
             satiation_capacity,
-            backpressure_notify,
+            //backpressure_notify,
             buffer_consumer,
         }
     }
@@ -104,8 +104,7 @@ impl<T: Sharable> WrappedSender<T> {
     ) -> Result<(), TokioSendError<DataWrapper<T>>> {
         let mut output_buffer = self.consume_buffer();
         input_data.swap_st(&mut output_buffer);
-
-        // FOR STEP 10 WAITING HERE!
+        
         self.send(output_buffer).await
     }
 
@@ -169,7 +168,7 @@ pub struct WrappedReceiver<T: Sharable> {
     source_id: usize,
     is_stopped: bool,
     receiver: TokioReceiver<DataWrapper<T>>,
-    backpressure_notify: Arc<Notify>,
+    //backpressure_notify: Arc<Notify>,
     satiation_capacity: Arc<AtomicUsize>,
     buffer_producer: Producer<T>,
 }
@@ -177,7 +176,7 @@ impl<T: Sharable> WrappedReceiver<T> {
     pub fn new(
         receiver: TokioReceiver<DataWrapper<T>>,
         source_id: usize,
-        backpressure_notify: Arc<Notify>,
+        //backpressure_notify: Arc<Notify>,
         satiation_capacity: Arc<AtomicUsize>,
         buffer_producer: Producer<T>,
     ) -> Self {
@@ -186,7 +185,7 @@ impl<T: Sharable> WrappedReceiver<T> {
             is_stopped: true,
             receiver,
             satiation_capacity,
-            backpressure_notify,
+            //backpressure_notify,
             buffer_producer,
         }
     }
@@ -213,15 +212,15 @@ impl<T: Sharable> WrappedReceiver<T> {
         self.is_stopped
     }
 
-    pub fn set_state(&mut self, stopped: bool) {
-        if stopped == self.is_stopped {
-            return;
-        }
-        self.is_stopped = stopped;
-        if stopped {
-            self.backpressure_notify.notify_one();
-        }
-    }
+    // pub fn set_state(&mut self, stopped: bool) {
+    //     if stopped == self.is_stopped {
+    //         return;
+    //     }
+    //     self.is_stopped = stopped;
+    //     if stopped {
+    //         self.backpressure_notify.notify_one();
+    //     }
+    // }
 
     pub fn channel_satiated(&self) -> bool {
         self.receiver.len()
@@ -233,6 +232,10 @@ impl<T: Sharable> WrappedReceiver<T> {
     pub fn set_satiation_capacity(&mut self, capacity: usize) {
         self.satiation_capacity
             .store(capacity, std::sync::atomic::Ordering::Release);
+    }
+    
+    pub fn get_source_id(&self) -> &usize {
+        &self.source_id
     }
 }
 
@@ -262,14 +265,14 @@ pub fn channel_wrapped<T: Sharable>(
         WrappedSender::new(
             sender,
             dest_id,
-            backpressure_notify.clone(),
+            //backpressure_notify.clone(),
             satiation_capacity.clone(),
             channel_wrapped_consumer,
         ),
         WrappedReceiver::new(
             receiver,
             source_id,
-            backpressure_notify,
+            // backpressure_notify,
             satiation_capacity,
             channel_wrapped_producer,
         ),
@@ -306,7 +309,7 @@ mod tests {
         let (_channel_wrapped_producer, channel_wrapped_consumer) =
             make_crossbeam_queue_handles(12);
 
-        let sender = WrappedSender::new(tx, 42, notify, capacity, channel_wrapped_consumer);
+        let sender = WrappedSender::new(tx, 42, capacity, channel_wrapped_consumer);
 
         assert_eq!(*sender.get_dest_id(), 42);
         assert!(sender.is_stopped());
@@ -321,7 +324,7 @@ mod tests {
         let (channel_wrapped_producer, _channel_wrapped_consumer) =
             make_crossbeam_queue_handles(12);
 
-        let receiver = WrappedReceiver::new(rx, 24, notify, capacity, channel_wrapped_producer);
+        let receiver = WrappedReceiver::new(rx, 24, capacity, channel_wrapped_producer);
 
         assert_eq!(receiver.source_id, 24);
         assert!(receiver.is_stopped());
@@ -393,22 +396,22 @@ mod tests {
         assert!(!receiver.channel_satiated());
     }
 
-    #[test]
-    fn test_wrapped_receiver_set_state() {
-        let (_, mut receiver) = channel_wrapped::<i32>(10, 0, 1);
-
-        assert!(receiver.is_stopped());
-
-        receiver.set_state(false);
-        assert!(!receiver.is_stopped());
-
-        receiver.set_state(true);
-        assert!(receiver.is_stopped());
-
-        // Setting same state should not change anything
-        receiver.set_state(true);
-        assert!(receiver.is_stopped());
-    }
+    // #[test]
+    // fn test_wrapped_receiver_set_state() {
+    //     let (_, mut receiver) = channel_wrapped::<i32>(10, 0, 1);
+    // 
+    //     assert!(receiver.is_stopped());
+    // 
+    //     receiver.set_state(false);
+    //     assert!(!receiver.is_stopped());
+    // 
+    //     receiver.set_state(true);
+    //     assert!(receiver.is_stopped());
+    // 
+    //     // Setting same state should not change anything
+    //     receiver.set_state(true);
+    //     assert!(receiver.is_stopped());
+    // }
 
     #[tokio::test]
     async fn test_iterative_send_success() {

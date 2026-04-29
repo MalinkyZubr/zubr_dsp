@@ -2,17 +2,17 @@ use crate::engine::communication_layer::comms_core::{WrappedReceiver, WrappedSen
 use crate::engine::communication_layer::data_management::BufferArray;
 use crate::engine::structural::node_types::deconstruct::PipelineDeconstructorNode;
 use crate::engine::structural::node_types::interleaving::PipelineDeInterleavingNode;
-use crate::engine::structural::generic_pipeline_node::{CollectibleNode, RunModel};
+use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
 use crate::engine::structural::node_types::standard::PipelineStandardNode;
 use crate::engine::structural::generic_node_operation::PipelineNodeOp;
 use crate::engine::structural::node_types::reconstruct::PipelineReconstructorNode;
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use log::{debug, info};
 use std::collections::HashMap;
-use crate::engine::construction_layer::build_vector::PreparedNode;
+use crate::engine::construction_layer::node_build_vector::PreparedNode;
 
 
-pub struct BuildingNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
+pub struct UnfinishedNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     id: usize,
     buffer_size: usize,
     name: String,
@@ -23,7 +23,7 @@ pub struct BuildingNode<I: Sharable, O: Sharable, const NI: usize, const NO: usi
     demanded_input_count: usize,
     initial_state: Option<O>,
 }
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNode<I, O, NI, NO> {
     pub fn new(name: String, id: usize, buffer_size: usize) -> Self {
         Self {
             id,
@@ -87,8 +87,8 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
     }
 }
 
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I, O, NI, NO> {
-    pub fn build_io_node(&mut self) -> PreparedNode {
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNode<I, O, NI, NO> {
+    pub fn build_io_node(mut self) -> PreparedNode {
         let id = self.id;
         let name = self.name.clone();
         let new_node = self.generate_node(RunModel::IO);
@@ -96,7 +96,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
         PreparedNode::new(Box::new(new_node), id, name)
     }
 
-    pub fn build_cpu_node(&mut self) -> PreparedNode {
+    pub fn build_cpu_node(mut self) -> PreparedNode {
         let id = self.id;
         let name = self.name.clone();
         let new_node = self.generate_node(RunModel::CPU);
@@ -106,7 +106,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> BuildingNode<I,
 }
 
 impl<T: Sharable, const NO: usize, const IBS: usize, const OBS: usize>
-    BuildingNode<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
+    UnfinishedNode<BufferArray<T, IBS>, BufferArray<T, OBS>, 1, NO>
 where
     [(); (IBS % NO == 0) as usize - 1]:,
     [(); (IBS % OBS == 0) as usize - 1]:, // input buffer size should be perfectly divisible by NUM_CHANNELS
@@ -130,18 +130,19 @@ where
                 },
             );
 
-        (self.id, self.name, Box::new(interleaved_separator))
+        PreparedNode::new(Box::new(interleaved_separator), self.id, self.name.clone())
     }
 
-    pub fn build_interleave(self) -> PreparedNode {
+    pub fn build_interleave(mut self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
         self.into_interleaved_separator()
     }
 }
-impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, ND>, T, 1, NO> {
-    fn into_series_deconstructor(mut self) -> PreparedNode {
+
+impl<T: Sharable, const NO: usize, const ND: usize> UnfinishedNode<BufferArray<T, ND>, T, 1, NO> {
+    fn generate_series_deconstructor(mut self) -> PreparedNode {
         assert!(ND <= self.buffer_size, "WARNING! THE DECONSTRUCTOR RELIES ON MPSC BUFFER SIZE! IF IT IS TOO SMALL DECONSTRUCTOR WILL LOCK UP! INCREASE YOUR PIPELINE BUFFER SIZE!");
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
@@ -149,10 +150,12 @@ impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, 
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
+        
+        let intermediate: Vec<WrappedSender<T>> = self.outputs.drain(..).collect();
         let deconstructor_separator: PipelineDeconstructorNode<T, NO, ND> =
             PipelineDeconstructorNode::new(
                 self.inputs.remove(0),
-                match self.outputs.try_into() {
+                match intermediate.try_into() {
                     Ok(out) => out,
                     Err(_) => panic!(
                         "Incorrect number of outputs for BuildingNode ID {}",
@@ -161,27 +164,26 @@ impl<T: Sharable, const NO: usize, const ND: usize> BuildingNode<BufferArray<T, 
                 },
             );
 
-        (self.id, self.name, Box::new(deconstructor_separator))
+        PreparedNode::new(Box::new(deconstructor_separator), self.id, self.name.clone())
     }
 
-    pub fn build_deconstruct(self) -> PreparedNode {
+    pub fn build_deconstruct(mut self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
-        self.into_series_deconstructor()
+        self.generate_series_deconstructor()
     }
 }
 
-impl<T: Sharable, const NO: usize, const NR: usize> BuildingNode<T, BufferArray<T, NR>, 1, NO> {
-    fn generate_series_reconstructor(&mut self) -> PreparedNode {
+impl<T: Sharable, const NO: usize, const NR: usize> UnfinishedNode<T, BufferArray<T, NR>, 1, NO> {
+    fn generate_series_reconstructor(mut self) -> PreparedNode {
         if self.step.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with a step attached. Read documentation on interleaver usage");
         }
         if self.initial_state.is_some() {
             panic!("Cannot convert BuildingNode into Interleaver with an initial state");
         }
-        let intermediate = self.outputs.drain(..).collect();
-        let mut input = self.inputs.remove(0);
+        let intermediate: Vec<_> = self.outputs.drain(..).collect();
         let reconstructor_separator: PipelineReconstructorNode<T, NO, NR> =
             PipelineReconstructorNode::new(
                 self.inputs.remove(0),
@@ -194,13 +196,13 @@ impl<T: Sharable, const NO: usize, const NR: usize> BuildingNode<T, BufferArray<
                 },
             );
 
-        (self.id, self.name.clone(), Box::new(reconstructor_separator))
+        PreparedNode::new(Box::new(reconstructor_separator), self.id, self.name.clone())
     }
 
-    pub fn build_reconstruct(self) -> PreparedNode {
+    pub fn build_reconstruct(mut self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
-        self.into_series_reconstructor()
+        self.generate_series_reconstructor()
     }
 }

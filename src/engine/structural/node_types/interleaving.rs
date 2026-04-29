@@ -1,6 +1,6 @@
 use crate::engine::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_pipeline_node::{CollectibleNode, RunModel};
+use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use log::{debug, error};
 use std::mem;
@@ -49,7 +49,7 @@ impl<
         const NUM_CHANNELS: usize,
         const INPUT_BUFFER_SIZE: usize,
         const OUTPUT_BUFFER_SIZE: usize,
-    > CollectibleNode
+    > GenericNode
     for PipelineDeInterleavingNode<I, NUM_CHANNELS, INPUT_BUFFER_SIZE, OUTPUT_BUFFER_SIZE>
 {
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
@@ -91,10 +91,16 @@ impl<
         NUM_CHANNELS
     }
     fn is_ready_exec(&self) -> bool {
-        self.input.channel_satiated()
+        match self.get_run_model() {
+            RunModel::Communicator => self.output_ready,
+            _ => self.input.channel_satiated(),
+        }
     }
     fn get_successors(&self) -> Vec<usize> {
         self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
+    fn get_predecessors(&self) -> Vec<usize> {
+        vec![*self.input.get_source_id()]
     }
     fn get_run_model(&self) -> RunModel {
         if self.output_ready {
@@ -143,11 +149,10 @@ mod tests {
             WrappedSender::new(
                 tx,
                 1,
-                notify.clone(),
                 capacity.clone(),
                 channel_wrapped_consumer,
             ),
-            WrappedReceiver::new(rx, 0, notify, capacity, channel_wrapped_producer),
+            WrappedReceiver::new(rx, 0, capacity, channel_wrapped_producer),
         )
     }
 

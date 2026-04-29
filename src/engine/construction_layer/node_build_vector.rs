@@ -1,14 +1,14 @@
 use log::info;
-use crate::engine::structural::generic_pipeline_node::CollectibleNode;
+use crate::engine::structural::generic_pipeline_node::GenericNode;
 
 
 pub struct PreparedNode {
-    pub node: Box<dyn CollectibleNode>,
+    pub node: Box<dyn GenericNode>,
     pub id: usize,
     pub name: String
 }
 impl PreparedNode {
-    pub fn new(node: Box<dyn CollectibleNode>, id: usize, name: String) -> Self {
+    pub fn new(node: Box<dyn GenericNode>, id: usize, name: String) -> Self {
         PreparedNode {
             node,
             id,

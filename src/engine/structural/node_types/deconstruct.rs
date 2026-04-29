@@ -2,7 +2,7 @@ use crate::engine::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
 use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_pipeline_node::{CollectibleNode, RunModel};
+use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
 use crate::engine::structural::pipeline_type_traits::Sharable;
 
 pub struct PipelineDeconstructorNode<I: Sharable, const NO: usize, const ND: usize> {
@@ -25,7 +25,7 @@ impl<I: Sharable, const NO: usize, const ND: usize> PipelineDeconstructorNode<I,
 }
 
 #[async_trait::async_trait]
-impl<I: Sharable, const NO: usize, const ND: usize> CollectibleNode
+impl<I: Sharable, const NO: usize, const ND: usize> GenericNode
     for PipelineDeconstructorNode<I, NO, ND>
 {
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
@@ -80,6 +80,9 @@ impl<I: Sharable, const NO: usize, const ND: usize> CollectibleNode
     fn get_successors(&self) -> Vec<usize> {
         self.output.iter().map(|x| *x.get_dest_id()).collect()
     }
+    fn get_predecessors(&self) -> Vec<usize> {
+        vec![*self.input.get_source_id()]
+    }
     fn get_run_model(&self) -> RunModel {
         RunModel::Communicator
     }
@@ -107,11 +110,10 @@ mod tests {
             WrappedSender::new(
                 tx,
                 1,
-                notify.clone(),
                 capacity.clone(),
                 channel_wrapped_consumer,
             ),
-            WrappedReceiver::new(rx, 0, notify, capacity, channel_wrapped_producer),
+            WrappedReceiver::new(rx, 0, capacity, channel_wrapped_producer),
         )
     }
 

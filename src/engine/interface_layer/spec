@@ -1,0 +1,2 @@
+1. the interface should be totally decoupled from the rest of the source code. Do not look at internal implementations anywhere else
+2. 

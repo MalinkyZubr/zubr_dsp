@@ -1,12 +1,12 @@
 use crate::engine::communication_layer::comms_core::{
     channel_wrapped, WrappedReceiver, WrappedSender,
 };
-use crate::engine::construction_layer::pipeline_builder::NodeBuilder;
+use crate::engine::construction_layer::unfinished_node_builder::UnfinishedNodeBuilder;
 
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::engine::construction_layer::build_vector::PipelineBuildVector;
+use crate::engine::construction_layer::node_build_vector::PipelineBuildVector;
 
 pub struct RecipeInputMapping<T: Sharable> {
     inputs: Vec<WrappedReceiver<T>>,
@@ -22,7 +22,7 @@ impl<T: Sharable> RecipeInputMapping<T> {
 
     fn push<I: Sharable, const NI: usize, const NO: usize>(
         &mut self,
-        builder: &mut NodeBuilder<I, T, NI, NO>,
+        builder: &mut UnfinishedNodeBuilder<I, T, NI, NO>,
     ) {
         self.inputs.push(builder.attach_to_recipe_input(self.id));
     }
@@ -42,14 +42,10 @@ impl<T: Sharable> RecipeOutputMapping<T> {
 
     fn push<F: Sharable, const NI: usize, const NO: usize>(
         &mut self,
-        builder: &mut NodeBuilder<T, F, NI, NO>,
+        builder: &mut UnfinishedNodeBuilder<T, F, NI, NO>,
     ) {
         let (sender, receiver) = channel_wrapped::<T>(
-            builder
-                .get_build_vector()
-                .borrow_mut()
-                .get_parameters()
-                .buff_size,
+            builder.get_parameters().max_in_flight,
             self.id,
             builder.get_node_id(),
         );
@@ -107,7 +103,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineRecipe<
 
     pub fn add_input<T: Sharable, const NIN: usize, const NON: usize>(
         &mut self,
-        node_builder: &mut NodeBuilder<T, I, NIN, NON>,
+        node_builder: &mut UnfinishedNodeBuilder<T, I, NIN, NON>,
         mapping: Vec<usize>, // to which ordered internal node does this go?
     ) {
         // mapping represents which internal nodes to connect the input to
@@ -118,7 +114,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineRecipe<
 
     pub fn feed_into<F: Sharable, const NIF: usize, const NOF: usize>(
         &mut self,
-        node_builder: &mut NodeBuilder<O, F, NIF, NOF>,
+        node_builder: &mut UnfinishedNodeBuilder<O, F, NIF, NOF>,
         mapping: Vec<usize>,
     ) {
         for output_position in mapping.iter() {

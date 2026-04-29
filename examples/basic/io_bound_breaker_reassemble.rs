@@ -20,10 +20,10 @@ use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
 use zubr_dsp::engine::communication_layer::data_management::BufferArray;
-use zubr_dsp::engine::construction_layer::pipeline_builder::NodeBuilder;
-use zubr_dsp::engine::construction_layer::node_builder::{PipelineBuildVector, PipelineParameters};
+use zubr_dsp::engine::construction_layer::unfinished_node_builder::UnfinishedNodeBuilder;
+use zubr_dsp::engine::construction_layer::unfinished_node::{PipelineBuildVector, PipelineParameters};
 use zubr_dsp::engine::orchestration_layer::pipeline_graph::PipelineGraph;
-use zubr_dsp::engine::orchestration_layer::scheduler_models::work_stealing_full_buffer::build_topographical_thread_pool;
+use zubr_dsp::engine::orchestration_layer::scheduler_models::topographical::build_topographical_thread_pool;
 use zubr_dsp::dsp::sampling::simple_downsample::*;
 use zubr_dsp::initiate_pipeline;
 
@@ -44,18 +44,18 @@ pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
         f32, 2048, 512, 256, 8, 128
     >();
 
-    let mut source: NodeBuilder<_, _, 0, 1> = NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
+    let mut source: UnfinishedNodeBuilder<_, _, 0, 1> = UnfinishedNodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
         "audio_source".to_string(),
         AudioFileSource::<2048>::new(input.as_str().trim(), 10),
         build_vector.clone(),
     );
-    let mut step1: NodeBuilder<_, _, 1, 1> = source
+    let mut step1: UnfinishedNodeBuilder<_, _, 1, 1> = source
         .attach_standard("throttle".to_string(), Throttle::new(88.2e3));
-    let mut step2: NodeBuilder<_, _, 1, 1> = step1.attach_standard("Chunker".to_string(), breaker);
+    let mut step2: UnfinishedNodeBuilder<_, _, 1, 1> = step1.attach_standard("Chunker".to_string(), breaker);
     let mut step3 = step2.attach_series_deconstructor::<1>("deconstructor".to_string());
     let mut step4 = step3.attach_series_reconstructor::<1, 8>("reconstructor".to_string());
-    let mut step5: NodeBuilder<_, _, 1, 1>= step4.attach_standard("dechunker".to_string(), combiner);
-    let mut step6: NodeBuilder<_, _, 1, 1> = step5.attach_standard("demodulator".to_string(), AMDemodulator::new(10.0, 0.5))
+    let mut step5: UnfinishedNodeBuilder<_, _, 1, 1>= step4.attach_standard("dechunker".to_string(), combiner);
+    let mut step6: UnfinishedNodeBuilder<_, _, 1, 1> = step5.attach_standard("demodulator".to_string(), AMDemodulator::new(10.0, 0.5))
         .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink));
 
     source.submit_cpu();

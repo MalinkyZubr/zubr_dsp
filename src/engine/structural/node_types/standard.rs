@@ -2,7 +2,7 @@ use crate::engine::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
 use crate::engine::communication_layer::data_management::DataWrapper;
-use crate::engine::structural::generic_pipeline_node::{CollectibleNode, RunModel};
+use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
 use crate::engine::structural::generic_node_operation::PipelineNodeOp;
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
@@ -101,7 +101,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineStandar
 }
 
 #[async_trait]
-impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
+impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
     for PipelineStandardNode<I, O, NI, NO>
 {
     async fn run_senders(&mut self, _id: usize) -> Option<usize> {
@@ -144,11 +144,18 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> CollectibleNode
     }
 
     fn is_ready_exec(&self) -> bool {
-        self.input.iter().all(|x| x.channel_satiated())
+        match self.get_run_model() {
+            RunModel::Communicator => true,
+            _ => self.input.iter().all(|x| x.channel_satiated())
+        }
     }
 
     fn get_successors(&self) -> Vec<usize> {
         self.output.iter().map(|x| *x.get_dest_id()).collect()
+    }
+    
+    fn get_predecessors(&self) -> Vec<usize> {
+        self.input.iter().map(|x| *x.get_source_id()).collect()
     }
 
     fn get_run_model(&self) -> RunModel {
