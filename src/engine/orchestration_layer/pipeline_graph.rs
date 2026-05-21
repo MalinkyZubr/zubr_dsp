@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize};
 use std::sync::Arc;
 use std::time;
 use std::time::UNIX_EPOCH;
+use iced::widget::text::success;
 
 #[derive(PartialEq, Debug)]
 pub enum PipelineNodeState {
@@ -35,49 +36,6 @@ impl PipelineNodeState {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NodeMasterReadData {
-    num_executions: Arc<AtomicUsize>,
-    last_execution_time_ns: Arc<AtomicU64>,
-    last_execution_instant: Arc<AtomicU64>,
-    current_state: Arc<AtomicU8>,
-}
-impl NodeMasterReadData {
-    pub fn new() -> NodeMasterReadData {
-        NodeMasterReadData {
-            num_executions: Arc::new(AtomicUsize::new(0)),
-            last_execution_time_ns: Arc::new(AtomicU64::new(0)),
-            current_state: Arc::new(AtomicU8::new(PipelineNodeState::Stop.into_u8())),
-            last_execution_instant: Arc::new(AtomicU64::new(0)),
-        }
-    }
-
-    pub fn update_analytics(&self, execution_time_ns: u64) {
-        self.num_executions
-            .fetch_add(1, std::sync::atomic::Ordering::Release);
-        self.last_execution_time_ns
-            .store(execution_time_ns, std::sync::atomic::Ordering::Release);
-        self.last_execution_instant.store(
-            time::SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            std::sync::atomic::Ordering::Relaxed,
-        );
-    }
-
-    pub fn duration_since_execution_secs(&self) -> u64 {
-        let current_time = time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        current_time
-            - self
-                .last_execution_instant
-                .load(std::sync::atomic::Ordering::Acquire)
-    }
-}
-
 // #[derive(Debug, Clone)]
 // pub struct NodeMasterWriteData {
 //     requested_state: PipelineNodeState,
@@ -90,184 +48,157 @@ impl NodeMasterReadData {
 //     }
 // }
 
-#[derive(Debug, Clone)]
-pub struct NodeImmutableData {
-    name: String,
-    is_source: bool,
-    is_sink: bool,
-    initially_stateful: bool,
-}
-impl NodeImmutableData {
-    pub fn new(name: String, is_source: bool, is_sink: bool, initially_stateful: bool) -> Self {
-        Self {
-            name,
-            is_source,
-            is_sink,
-            initially_stateful,
-        }
-    }
-}
 
 pub struct PipelineGraph {
-    state_request_map_source: SCCHashMap<usize, u8>, // map to hold the requested state for each node. Can be modified by either neighbor nodes or the master thread
-    state_request_map_sink: SCCHashMap<usize, u8>,
-    master_read_array: Arc<[CachePadded<NodeMasterReadData>]>, // holds data mutable to the compute threads. The master (main thread) should read analytics and metadata from here
-    node_immutable_data: Arc<[NodeImmutableData]>, // holds data that can be read by all but is immutable.
-    mutable_state_map: SCCHashMap<usize, Box<dyn GenericNode>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
+    nodes: SCCHashMap<usize, Box<dyn GenericNode>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
+    source_ids: Vec<usize>,
+    sink_ids: Vec<usize>,
+    initially_stateful_ids: Vec<usize>,
+    num_nodes: usize,
 }
 impl PipelineGraph {
     pub fn new(prepared_nodes: Vec<PreparedNode>) -> Self {
-        let mut master_read_vec = vec![CachePadded::new(NodeMasterReadData::new()); prepared_nodes.len()];
-        let mut node_immutable_data =
-            vec![NodeImmutableData::new(String::from(""), false, false, false); prepared_nodes.len()];
-        let mutable_state_map = SCCHashMap::with_capacity(prepared_nodes.len());
-        let state_request_map_source = SCCHashMap::new();
-        let state_request_map_sink = SCCHashMap::new();
+        let mut nodes = SCCHashMap::new();
+        let mut source_ids = Vec::new();
+        let mut sink_ids = Vec::new();
+        let mut initially_stateful_ids = Vec::new();
+
+        let num_nodes = prepared_nodes.len();
 
         info!("GRAPH NODE ID NAME MAPPINGS (FOR DEBUG):");
         for prepared_node in prepared_nodes {
-            node_immutable_data[prepared_node.id] = NodeImmutableData::new(
-                prepared_node.name,
-                prepared_node.node.get_num_inputs() == 0,
-                prepared_node.node.get_num_outputs() == 0,
-                prepared_node.node.has_initial_state(),
-            );
-            *master_read_vec[prepared_node.id] = NodeMasterReadData::new();
-
             if prepared_node.node.is_source() {
-                match state_request_map_source.insert_sync(prepared_node.id, PipelineNodeState::Stop.into_u8()) {
-                    Ok(_) => {}
-                    Err(_) => panic!("Node {} already exists in the graph", prepared_node.id),
-                }
+                source_ids.push(prepared_node.id);
             }
-
-            if prepared_node.node.is_sink() {
-                match state_request_map_sink.insert_sync(prepared_node.id, PipelineNodeState::Stop.into_u8()) {
-                    Ok(_) => {}
-                    Err(_) => panic!("Node {} already exists in the graph", prepared_node.id),
-                }
+            else if prepared_node.node.is_sink() {
+                sink_ids.push(prepared_node.id);
             }
-
-            match mutable_state_map.insert_sync(prepared_node.id, prepared_node.node) {
+            if prepared_node.node.has_initial_state() {
+                initially_stateful_ids.push(prepared_node.id);
+            }
+            match nodes.insert_sync(prepared_node.id, prepared_node.node) {
                 Ok(_) => {}
                 Err(_) => panic!("Node {} already exists in the graph", prepared_node.id),
             }
         }
+        
         Self {
-            state_request_map_source,
-            state_request_map_sink,
-            master_read_array: Arc::from(master_read_vec),
-            node_immutable_data: Arc::from(node_immutable_data),
-            mutable_state_map,
+            source_ids,
+            sink_ids,
+            initially_stateful_ids,
+            nodes,
+            num_nodes,
         }
     }
 
-    pub fn get_all_mutable_state(&self) -> Vec<Box<dyn GenericNode>> {
-        let mut mutable_states = Vec::with_capacity(self.mutable_state_map.len());
+    pub fn get_all_nodes(&self) -> Vec<Box<dyn GenericNode>> {
+        let mut nodes = Vec::with_capacity(self.nodes.len());
 
-        for id in 0..self.node_immutable_data.len() {
-            if let Some((_id, node)) = self.mutable_state_map.remove_if_sync(&id, |_| true) {
-                mutable_states.push(node);
+        for id in 0..self.num_nodes {
+            if let Some((_id, node)) = self.nodes.remove_if_sync(&id, |_| true) {
+                nodes.push(node);
             }
         }
 
-        mutable_states
+        nodes
     }
 
-    pub fn get_all_sources(&self) -> Vec<usize> {
-        let mut sources = vec![];
-        for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
-            if immutable_data.is_source {
-                sources.push(id);
-            }
-        }
+    // pub fn get_all_sources(&self) -> Vec<Box<dyn GenericNode>> {
+    //     // does not guarantee that all sources are present
+    //     let mut nodes = Vec::with_capacity(self.nodes.len());
+    // 
+    //     for id in 0..self.num_nodes {
+    //         if let Some((_id, node)) = self.nodes.remove_if_sync(&id, |_| true) {
+    //             if node.is_source() {
+    //                 nodes.push(node);
+    //             }
+    //         }
+    //     }
+    // 
+    //     nodes
+    // }
+    // 
+    // pub fn get_all_sinks(&self) -> Vec<Box<dyn GenericNode>> {
+    //     // does not guarantee that all sources are present
+    //     let mut nodes = Vec::with_capacity(self.nodes.len());
+    // 
+    //     for id in 0..self.num_nodes {
+    //         if let Some((_id, node)) = self.nodes.remove_if_sync(&id, |_| true) {
+    //             if node.is_sink() {
+    //                 nodes.push(node);
+    //             }
+    //         }
+    //     }
+    // 
+    //     nodes
+    // }
+    // 
+    // pub fn get_all_initially_stateful(&self) -> Vec<Box<dyn GenericNode>> {
+    //     // does not guarantee that all sources are present
+    //     let mut nodes = Vec::with_capacity(self.nodes.len());
+    // 
+    //     for id in 0..self.num_nodes {
+    //         if let Some((_id, node)) = self.nodes.remove_if_sync(&id, |_| true) {
+    //             if node.has_initial_state() {
+    //                 nodes.push(node);
+    //             }
+    //         }
+    //     }
+    // 
+    //     nodes
+    // }
+    
+    // pub fn get_all_start_nodes(&self) -> Vec<Box<dyn GenericNode>> {
+    //     let mut sources = self.get_all_sources();
+    //     sources.extend(self.get_all_initially_stateful());
+    //     sources
+    // }
+    
+    pub fn get_all_start_nodes(&self) -> Vec<usize> {
+        let mut sources = self.source_ids.clone();
+        sources.extend(self.initially_stateful_ids.clone());
         sources
-    }
-
-    pub fn get_all_sinks(&self) -> Vec<usize> {
-        let mut sinks = vec![];
-        for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
-            if immutable_data.is_sink {
-                sinks.push(id);
-            }
-        }
-        sinks
-    }
-
-    pub fn get_all_initially_stateful(&self) -> Vec<usize> {
-        let mut initially_stateful = vec![];
-        for (id, immutable_data) in self.node_immutable_data.iter().enumerate() {
-            if immutable_data.initially_stateful {
-                initially_stateful.push(id);
-            }
-        }
-        initially_stateful
-    }
-
-    pub fn get_node_name(&self, id: usize) -> String {
-        self.node_immutable_data[id].name.clone()
-    }
-
-    pub fn get_node_analytics(&self, id: usize) -> (usize, u64, PipelineNodeState, u64) {
-        (
-            self.master_read_array[id]
-                .num_executions
-                .load(std::sync::atomic::Ordering::Acquire),
-            self.master_read_array[id]
-                .last_execution_time_ns
-                .load(std::sync::atomic::Ordering::Acquire),
-            PipelineNodeState::from_u8(
-                self.master_read_array[id]
-                    .current_state
-                    .load(std::sync::atomic::Ordering::Acquire),
-            ),
-            self.master_read_array[id].duration_since_execution_secs(),
-        )
-    }
-
-    pub fn get_num_nodes(&self) -> usize {
-        self.node_immutable_data.len()
     }
 
     pub fn stop_sink(&self, _id: usize) {
         todo!()
     }
 
-    pub async fn stop_source(&self, id: usize) -> bool {
-        self.state_request_map_source
-            .update_async(&id, |_, v| {
-                *v = PipelineNodeState::Stop.into_u8();
-                *v
-            })
-            .await
-            .is_some()
-    }
-
-    pub async fn start_source(&self, id: usize) -> bool {
-        self.state_request_map_source
-            .update_async(&id, |_, v| {
-                *v = PipelineNodeState::Run.into_u8();
-                *v
-            })
-            .await
-            .is_some()
-    }
-
-    pub fn update_analytics(&self, id: usize, execution_time_ns: u64) {
-        self.master_read_array[id].update_analytics(execution_time_ns);
-    }
-
-    pub fn start_all(&self) {}
-
-    pub fn stop_all(&self) {}
-
-    pub fn get_node(&self, id: usize) -> Option<(usize, Box<dyn GenericNode>)> {
-        self.mutable_state_map.remove_if_sync(&id, |_| true)
-    }
-
-    pub fn place_node(&self, id: usize, node: Box<dyn GenericNode>) -> Option<()> {
-        self.mutable_state_map.insert_sync(id, node).ok()
-    }
+    // pub async fn stop_source(&self, id: usize) -> bool {
+    //     self.state_request_map_source
+    //         .update_async(&id, |_, v| {
+    //             *v = PipelineNodeState::Stop.into_u8();
+    //             *v
+    //         })
+    //         .await
+    //         .is_some()
+    // }
+    // 
+    // pub async fn start_source(&self, id: usize) -> bool {
+    //     self.state_request_map_source
+    //         .update_async(&id, |_, v| {
+    //             *v = PipelineNodeState::Run.into_u8();
+    //             *v
+    //         })
+    //         .await
+    //         .is_some()
+    // }
+    // 
+    // pub fn update_analytics(&self, id: usize, execution_time_ns: u64) {
+    //     self.master_read_array[id].update_analytics(execution_time_ns);
+    // }
+    // 
+    // pub fn start_all(&self) {}
+    // 
+    // pub fn stop_all(&self) {}
+    // 
+    // pub fn get_node(&self, id: usize) -> Option<(usize, Box<dyn GenericNode>)> {
+    //     self.mutable_state_map.remove_if_sync(&id, |_| true)
+    // }
+    // 
+    // pub fn place_node(&self, id: usize, node: Box<dyn GenericNode>) -> Option<()> {
+    //     self.mutable_state_map.insert_sync(id, node).ok()
+    // }
 }
 
 // #[cfg(test)]

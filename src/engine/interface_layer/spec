@@ -1,2 +1,9 @@
 1. the interface should be totally decoupled from the rest of the source code. Do not look at internal implementations anywhere else
-2. 
+
+## Views:
+### main view:
+1. htop style menu with a row for every node in the pipeline. The contents of each row are determined from a Vec given at start of runtime. Updates to the data are given by
+BTreeMap with keys matching names in the vector originally provided
+2. up and down arrows should highlight one of the rows
+3. hitting enter while one row is selected should open up the node log view
+4. hitting 

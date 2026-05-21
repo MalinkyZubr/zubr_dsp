@@ -2,7 +2,8 @@ use crate::engine::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
 use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
+use crate::engine::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
+use crate::engine::structural::generic_pipeline_node::NodeState::ExecCommunicate;
 use crate::engine::structural::pipeline_type_traits::Sharable;
 
 pub struct PipelineDeconstructorNode<I: Sharable, const NO: usize, const ND: usize> {
@@ -28,7 +29,7 @@ impl<I: Sharable, const NO: usize, const ND: usize> PipelineDeconstructorNode<I,
 impl<I: Sharable, const NO: usize, const ND: usize> GenericNode
     for PipelineDeconstructorNode<I, NO, ND>
 {
-    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+    async fn run_senders(&mut self) -> Option<usize> {
         let mut received = self.input.recv_async().await.unwrap();
         let mut num_received = 0;
 
@@ -85,6 +86,9 @@ impl<I: Sharable, const NO: usize, const ND: usize> GenericNode
     }
     fn get_run_model(&self) -> RunModel {
         RunModel::Communicator
+    }
+    fn next_state(&self, _current_state: NodeState) -> NodeState {
+        ExecCommunicate
     }
 }
 

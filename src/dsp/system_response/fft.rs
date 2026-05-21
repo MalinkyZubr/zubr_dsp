@@ -1,9 +1,11 @@
+use std::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
 use crate::engine::structural::generic_node_operation::PipelineNodeOp;
 use log::warn;
 use num::Complex;
 use rustfft::{Fft, FftNum, FftPlanner};
 use std::sync::Arc;
+use num_traits::{cast, NumCast};
 
 pub struct FFT<T: FftNum, const BUFFER_SIZE: usize> {
     fft: Arc<dyn Fft<T>>,
@@ -58,7 +60,7 @@ impl<T: FftNum, const BUFFER_SIZE: usize> IFFT<T, BUFFER_SIZE> {
 }
 
 
-impl<T: FftNum + Default, const BUFFER_SIZE: usize>
+impl<T: FftNum + Default + DivAssign + AddAssign + MulAssign + RemAssign + SubAssign + NumCast, const BUFFER_SIZE: usize>
 PipelineNodeOp<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
 for IFFT<T, BUFFER_SIZE>
 {
@@ -69,6 +71,11 @@ for IFFT<T, BUFFER_SIZE>
     ) -> Result<(), ()> {
         self.fft.process(input[0].read().read_mut());
         output.swap_st(&mut input[0]);
+        
+        for value in output.read().read_mut().iter_mut() {
+            *value /= cast::<usize, T>(BUFFER_SIZE).unwrap();
+        }
+        
         Ok(())
     }
 }

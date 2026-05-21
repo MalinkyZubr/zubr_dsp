@@ -8,6 +8,7 @@ use crate::engine::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
 use std::mem;
 
+
 pub struct PipelineStandardNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     step: Box<dyn PipelineNodeOp<I, O, NI>>,
 
@@ -104,7 +105,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineStandar
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
     for PipelineStandardNode<I, O, NI, NO>
 {
-    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+    async fn run_senders(&mut self) -> Option<usize> {
         let result;
         if self.output_ready {
             result = iterative_send(

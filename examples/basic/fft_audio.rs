@@ -28,8 +28,8 @@ use zubr_dsp::engine::orchestration_layer::scheduler_models::topographical::Thre
 use zubr_dsp::engine::structural::generic_pipeline_node::RunModel::{CPU, IO};
 use zubr_dsp::initiate_pipeline;
 
-pub fn am_end_to_end_test() -> Result<(), String> {
-    println!("Beginning simulated AM end to end test\nEnter absolute path to mp3:");
+pub fn fft_audio_test() -> Result<(), String> {
+    println!("Beginning fft audio test\nEnter absolute path to mp3:");
 
     let rt = Arc::new(Builder::new_multi_thread()
         .worker_threads(16)          // increase async worker threads
@@ -40,7 +40,7 @@ pub fn am_end_to_end_test() -> Result<(), String> {
 
     let stream = OutputStreamBuilder::open_default_stream().unwrap();
     let aud_sink = Sink::connect_new(stream.mixer());
-    
+
     initiate_pipeline(Level::Trace);
 
     let mut pipeline: Pipeline<ThreadPoolTopographicalHandle> = build_pipeline(
@@ -61,31 +61,19 @@ pub fn am_end_to_end_test() -> Result<(), String> {
                 par,
                 CPU
             );
-            let carrier_amplitude = 10.0;
-            let carrier_frequency = 1e8;
-            let modulation_index = 0.5;
-            let sample_frequency = 2.5e8;
-            
             source
                 .attach_standard::<_, 1, 1>("throttle".to_string(), Throttle::new(88.2e3), IO)
-                .attach_standard::<_, 1, 1>("AM Modulator".to_string(), AMModulator::new(carrier_amplitude, carrier_frequency, modulation_index, sample_frequency), CPU)
-                .attach_standard::<_, 1, 1>("Chunker".to_string(), breaker, CPU)
-                .attach_series_deconstructor::<1>("deconstructor".to_string())
                 .attach_standard::<_, 1, 1>("to complex".to_string(), RealToComplex::new(), CPU)
                 .attach_standard::<_, 1, 1>("fft".to_string(), FFT::new(), CPU)
-                .attach_standard::<_, 1, 1>("analytic filter".to_string(), FIRFilter::new(tf_analytic::<_, 512>()), CPU)
                 .attach_standard::<_, 1, 1>("ifft".to_string(), IFFT::new(), CPU)
-                .attach_standard::<_, 1, 1>("to real".to_string(), ComplexMagnitude::new(), CPU)
-                .attach_series_reconstructor::<1, 8>("reconstructor".to_string())
-                .attach_standard::<_, 1, 1>("dechunker".to_string(), combiner, CPU)
-                .attach_standard::<_, 1, 1>("demodulator".to_string(), AMDemodulator::new(carrier_amplitude, modulation_index), CPU)
+                .attach_standard::<_, 1, 1>("to real".to_string(), ComplexToReal::new(), CPU)
                 .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
         PipelineParameters::new(16, 5, None),
         rt,
         false
     ).unwrap();
-    
+
     pipeline.start();
 
     println!("Press enter to stop");

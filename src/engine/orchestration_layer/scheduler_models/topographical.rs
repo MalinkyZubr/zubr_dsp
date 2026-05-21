@@ -5,6 +5,8 @@ use rayon::{ThreadPool as RayonPool, ThreadPoolBuilder as RayonBuilder};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use tokio::runtime::{Handle, Runtime};
+use crate::engine::construction_layer::unfinished_node_builder::PipelineParameters;
+use crate::engine::orchestration_layer::pipeline_hl::PipelineScheduler;
 
 pub trait ThreadTaskTopographical {
     fn execute(&mut self) -> (Vec<Arc<dyn ThreadTaskTopographical>>, bool);
@@ -286,39 +288,36 @@ impl ThreadPoolTopographical {
     }
 }
 
-
-fn debug_analytics(graph: Arc<PipelineGraph>) {
-    info!("NODE ANALYTICS:");
-    for node_id in 0..graph.get_num_nodes() {
-        let (num_executions, exec_time_ns, node_state, time_since_exec_secs) = graph.get_node_analytics(node_id);
-        info!("\tNode {} {}: {} executions, exec time {} ns, state: {:?}, time since last exec: {} secs", node_id, graph.get_node_name(node_id), num_executions, exec_time_ns, node_state, time_since_exec_secs);
-    }
-}
-
 pub struct ThreadPoolTopographicalHandle {
     run_flag: Arc<AtomicBool>,
     graph: Arc<PipelineGraph>,
     master_pool: Arc<ThreadPoolTopographical>,
     analytic_task: Option<tokio::task::JoinHandle<()>>,
+    async_runtime: Arc<Runtime>,
 }
-impl ThreadPoolTopographicalHandle {
-    pub fn new(
-        run_flag: Arc<AtomicBool>,
+impl PipelineScheduler for ThreadPoolTopographicalHandle {
+    fn new(
         graph: Arc<PipelineGraph>,
-        master_pool: Arc<ThreadPoolTopographical>,
-        async_runtime: &Runtime,
-        debug_analytic_interval: Option<u64>,
+        pipeline_parameters: PipelineParameters,
+        async_runtime: Arc<Runtime>,
     ) -> Self {
         debug!("Creating ThreadPoolTopographicalHandle");
+        let thread_pool: Arc<ThreadPoolTopographical> = Arc::new(ThreadPoolTopographical::new(
+            pipeline_parameters.num_compute_threads,
+            graph.clone(),
+        ));
+        
+        let run_flag = thread_pool.get_run_flag();
+        
         let mut analytic_task;
-        match debug_analytic_interval {
+        match pipeline_parameters.debug_analytic_interval {
             Some(interval) => {
                 let graph_clone = graph.clone();
                 let run_flag_clone = run_flag.clone();
                 analytic_task = Some(async_runtime.handle().spawn(async move {
                     loop {
                         if run_flag_clone.load(std::sync::atomic::Ordering::Acquire) {
-                            debug_analytics(graph_clone.clone());
+                            
                         }
                         tokio::time::sleep(tokio::time::Duration::from_secs(interval)).await;
                     }
@@ -329,56 +328,32 @@ impl ThreadPoolTopographicalHandle {
         Self {
             run_flag,
             graph,
-            master_pool,
+            master_pool: thread_pool,
             analytic_task,
+            async_runtime
         }
     }
 
-    pub fn stop(&mut self) {
-        info!("Stopping thread pool execution");
-        self.run_flag
-            .store(false, std::sync::atomic::Ordering::Release);
-        debug!("Thread pool stop signal sent");
-    }
-
-    pub fn start(&mut self, async_runtime: &Runtime) {
+    fn scheduler_start(&mut self) {
         info!("Starting thread pool execution");
         self.run_flag
             .store(true, std::sync::atomic::Ordering::Release);
 
-        let sources = self.graph.get_all_sources();
-        debug!("Found {} source nodes to execute", sources.len());
+        let start_nodes = self.graph.get_all_start_nodes();
 
         let weak_ref = Arc::downgrade(&self.master_pool);
-        for source in &sources {
-            let async_handle = async_runtime.handle();
-            debug!("Triggering execution of source node {}", source);
-            ThreadPoolTopographical::task_starting_point(weak_ref.clone(), *source, async_handle);
-        }
-
-        let initially_stateful = self.graph.get_all_initially_stateful();
-        debug!(
-            "Found {} initially stateful nodes to execute",
-            initially_stateful.len()
-        );
-
-        for node in &initially_stateful {
-            let async_handle = async_runtime.handle();
-            debug!("Triggering execution of initially stateful node {}", node);
+        for node in &start_nodes {
+            let async_handle = self.async_runtime.handle();
             ThreadPoolTopographical::task_starting_point(weak_ref.clone(), *node, async_handle);
         }
-
-        info!(
-            "Thread pool started with {} source nodes and {} initially stateful nodes",
-            sources.len(),
-            initially_stateful.len()
-        );
+        info!("All start nodes scheduled");
     }
 
-    pub fn kill(mut self) {
-        info!("Killing thread pool (stopping execution)");
-        self.stop();
-        debug!("Thread pool killed");
+    fn scheduler_stop(&mut self) {
+        info!("Stopping thread pool execution");
+        self.run_flag
+            .store(false, std::sync::atomic::Ordering::Release);
+        debug!("Thread pool stop signal sent");
     }
 }
 
@@ -386,31 +361,6 @@ impl ThreadPoolTopographicalHandle {
 // assumption that all current requested computations have enough time to trigger, 
 // so the nodes submit back to the graph 
 // what if start is called before all nodes have actually stopped on the stop order? Needs to be a check
-
-
-pub fn build_topographical_thread_pool(
-    num_compute_thread: usize,
-    num_async_thread: usize,
-    graph: Arc<PipelineGraph>,
-    async_runtime: &Runtime,
-    debug_analytic_interval: Option<u64>,
-) -> ThreadPoolTopographicalHandle {
-    info!(
-        "Building topographical thread pool with {} compute threads and {} async threads",
-        num_compute_thread, num_async_thread
-    );
-
-    let new_thread_pool: Arc<ThreadPoolTopographical> = Arc::new(ThreadPoolTopographical::new(
-        num_compute_thread,
-        graph.clone(),
-    ));
-
-    let new_handle =
-        ThreadPoolTopographicalHandle::new(new_thread_pool.get_run_flag(), graph, new_thread_pool, async_runtime, debug_analytic_interval);
-
-    info!("Topographical thread pool built successfully");
-    new_handle
-}
 // 
 // #[cfg(test)]
 // mod tests {

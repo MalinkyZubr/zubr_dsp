@@ -10,6 +10,7 @@ use crate::engine::interface_layer::interface_hl::Interface;
 use crate::engine::orchestration_layer::pipeline_graph::PipelineGraph;
 use crate::engine::orchestration_layer::pipeline_hl::{Pipeline, PipelineScheduler};
 
+
 pub type PipelineBuildRoutine = Box<dyn FnOnce(Rc<RefCell<PipelineBuildVector>>, PipelineParameters) -> ()>;
 
 
@@ -17,10 +18,10 @@ pub type PipelineBuildRoutine = Box<dyn FnOnce(Rc<RefCell<PipelineBuildVector>>,
 pub fn build_pipeline<Scheduler: PipelineScheduler>(
     build_routine: PipelineBuildRoutine,
     pipeline_parameters: PipelineParameters,
-    io_op_runtime: Runtime,
+    io_op_runtime: Arc<Runtime>,
     verify: bool
 ) -> Result<Pipeline<Scheduler>, String> { // should return some handle type on ok, not ()
-    let mut build_vector = Rc::new(RefCell::new(PipelineBuildVector::new()));
+    let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new()));
     build_routine(build_vector.clone(), pipeline_parameters.clone());
     
     let mut prepared_nodes = build_vector.borrow_mut().submit_nodes();

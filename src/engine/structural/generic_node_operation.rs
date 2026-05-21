@@ -1,6 +1,7 @@
 use crate::engine::communication_layer::data_management::DataWrapper;
 use crate::engine::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
+use std::any::type_name;
 
 // how can I make multiple input and output types more convenient?
 /*
@@ -15,14 +16,14 @@ pub trait PipelineNodeOp<I: Sharable, O: Sharable, const NI: usize>: Send + Sync
         _input: &mut [DataWrapper<I>; NI],
         _output: &mut DataWrapper<O>,
     ) -> Result<(), ()> {
-        panic!("run not implemented!")
+        panic!("CPU run not implemented on {}!", type_name::<Self>())
     }
     async fn run_io(
         &mut self,
         _input: &mut [DataWrapper<I>; NI],
         _output: &mut DataWrapper<O>,
     ) -> Result<(), ()> {
-        panic!("run not implemented!")
+        panic!("IO run not implemented on {}!", type_name::<Self>())
     }
 }
 

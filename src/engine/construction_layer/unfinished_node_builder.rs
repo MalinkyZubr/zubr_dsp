@@ -15,13 +15,15 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct PipelineParameters {
     pub max_in_flight: usize,
-    pub num_compute_threads: usize
+    pub num_compute_threads: usize,
+    pub debug_analytic_interval: Option<u64>
 }
 impl PipelineParameters {
-    pub fn new(max_in_flight: usize, num_compute_threads: usize) -> Self {
+    pub fn new(max_in_flight: usize, num_compute_threads: usize, debug_analytic_interval: Option<u64>) -> Self {
         Self {
             max_in_flight,
             num_compute_threads,
+            debug_analytic_interval,
         }
     }
 }
