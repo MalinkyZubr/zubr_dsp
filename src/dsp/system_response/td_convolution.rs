@@ -1,6 +1,6 @@
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::structural::generic_node_operation::*;
-use crate::engine::structural::pipeline_type_traits::*;
+use crate::engine::data_plane::::data_management::*;
+use crate::engine::data_plane::::generic_node_operation::*;
+use crate::engine::data_plane::::pipeline_type_traits::*;
 use num::Num;
 use std::iter::Sum;
 use std::mem;
@@ -65,7 +65,7 @@ impl<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
 
 #[cfg(test)]
 mod td_convolution_tests {
-    use crate::engine::communication_layer::data_management::BufferArray;
+    use crate::engine::data_plane::::data_management::BufferArray;
 
     #[test]
     fn test_td_convolution_ir_eq_in() {

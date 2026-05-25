@@ -1,6 +1,6 @@
 use std::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
 use log::warn;
 use num::Complex;
 use rustfft::{Fft, FftNum, FftPlanner};

@@ -19,13 +19,13 @@ use zubr_dsp::dsp::system_response::special_transfer_functions::tf_analytic;
 use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
-use zubr_dsp::engine::communication_layer::data_management::BufferArray;
-use zubr_dsp::engine::construction_layer::unfinished_node_builder::{PipelineParameters, UnfinishedNodeBuilder};
+use zubr_dsp::engine::data_plane::::data_management::BufferArray;
+use zubr_dsp::engine::data_plane::::unfinished_node_builder::{PipelineParameters, UnfinishedNodeBuilder};
 use zubr_dsp::dsp::sampling::simple_downsample::*;
-use zubr_dsp::engine::construction_layer::build::build_pipeline;
-use zubr_dsp::engine::orchestration_layer::pipeline_hl::Pipeline;
-use zubr_dsp::engine::orchestration_layer::scheduler_models::topographical::ThreadPoolTopographicalHandle;
-use zubr_dsp::engine::structural::generic_pipeline_node::RunModel::{CPU, IO};
+use zubr_dsp::engine::build::build_pipeline;
+use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
+use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
+use zubr_dsp::engine::data_plane::::generic_pipeline_node::RunModel::{CPU, IO};
 use zubr_dsp::initiate_pipeline;
 
 pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {

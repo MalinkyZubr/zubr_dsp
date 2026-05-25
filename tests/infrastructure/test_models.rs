@@ -2,8 +2,8 @@ use log::{debug, warn};
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
-use zubr_dsp::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use zubr_dsp::engine::structural::generic_node_operation::{PipelineSink, PipelineSource, PipelineNodeOp};
+use zubr_dsp::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use zubr_dsp::engine::data_plane::::generic_node_operation::{PipelineSink, PipelineSource, PipelineNodeOp};
 pub struct TestSourceI32<const BS: usize> {
     input_test_vec: BufferArray<i32, BS>,
     test_ctr: usize,

@@ -1,9 +1,9 @@
 use std::time::Instant;
 use async_trait::async_trait;
-use crate::engine::structural::generic_node_operation;
-use crate::engine::structural::pipeline_type_traits::Sharable;
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::::generic_node_operation;
+use crate::engine::data_plane::::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::::data_management::*;
+use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
 use tokio::time::{sleep, Duration};
 
 pub struct Throttle<const BUFFER_SIZE: usize> {

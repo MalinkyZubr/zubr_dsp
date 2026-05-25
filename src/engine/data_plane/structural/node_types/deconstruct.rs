@@ -1,10 +1,10 @@
-use crate::engine::communication_layer::comms_core::{
+use crate::engine::data_plane::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
-use crate::engine::structural::generic_pipeline_node::NodeState::ExecCommunicate;
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
+use crate::engine::data_plane::structural::generic_pipeline_node::NodeState::ExecCommunicate;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 
 pub struct PipelineDeconstructorNode<I: Sharable, const NO: usize, const ND: usize> {
     // need to have a buuilder struct that wraps in identification info to make the graph after
@@ -56,17 +56,16 @@ impl<I: Sharable, const NO: usize, const ND: usize> GenericNode
         Some(num_received)
     }
 
-    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
-        if edge_index < NO {
-            Some(self.satiated_edges[edge_index])
-        } else {
-            None
+    fn get_satiated_edges(&self, num_satiated: usize) -> &[usize] {
+        if num_satiated > self.satiated_edges.len() {
+            panic!("Number of satiated edges is greater than the number of outputs")
         }
+        &self.satiated_edges[..num_satiated]
     }
-    fn load_initial_state(&mut self) {
+    fn load_initial_value(&mut self) {
         panic!("Series deconstructor should not have initial state")
     }
-    fn has_initial_state(&self) -> bool {
+    fn has_initial_value(&self) -> bool {
         false
     }
     fn get_num_inputs(&self) -> usize {
@@ -75,7 +74,7 @@ impl<I: Sharable, const NO: usize, const ND: usize> GenericNode
     fn get_num_outputs(&self) -> usize {
         NO
     }
-    fn is_ready_exec(&self) -> bool {
+    fn is_ready_exec(&self, node_state: NodeState) -> bool {
         self.input.channel_satiated()
     }
     fn get_successors(&self) -> Vec<usize> {
@@ -90,6 +89,10 @@ impl<I: Sharable, const NO: usize, const ND: usize> GenericNode
     fn next_state(&self, _current_state: NodeState) -> NodeState {
         ExecCommunicate
     }
+    fn initial_state(&self) -> NodeState {
+        ExecCommunicate
+    }
+    
 }
 
 #[cfg(test)]
@@ -108,7 +111,7 @@ mod tests {
         let capacity = Arc::new(AtomicUsize::new(1));
 
         let (channel_wrapped_producer, channel_wrapped_consumer) =
-            crate::engine::communication_layer::comms_core::make_crossbeam_queue_handles(12);
+            crate::engine::data_plane::communication_layer::comms_core::make_crossbeam_queue_handles(12);
 
         (
             WrappedSender::new(
@@ -131,7 +134,7 @@ mod tests {
 
         assert_eq!(deconstructor.get_num_inputs(), 1);
         assert_eq!(deconstructor.get_num_outputs(), 2);
-        assert!(!deconstructor.has_initial_state());
+        assert!(!deconstructor.has_initial_value());
         assert_eq!(deconstructor.get_run_model(), RunModel::Communicator);
     }
 
@@ -157,7 +160,7 @@ mod tests {
 
         let mut deconstructor = PipelineDeconstructorNode::new(input, [output1, output2]);
 
-        deconstructor.load_initial_state();
+        deconstructor.load_initial_value();
     }
 
     #[tokio::test]
@@ -174,7 +177,7 @@ mod tests {
         tx.send_swap(&mut test_vec).await.unwrap();
 
         // Run the deconstructor
-        let result = deconstructor.run_senders(0).await;
+        let result = deconstructor.run_senders().await;
         assert!(result.is_some());
 
         // Verify both outputs received all items

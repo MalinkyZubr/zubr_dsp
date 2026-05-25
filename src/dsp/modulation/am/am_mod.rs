@@ -1,6 +1,6 @@
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::pipeline_type_traits::*;
-use crate::engine::structural::generic_node_operation::*;
+use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::::pipeline_type_traits::*;
+use crate::engine::data_plane::::generic_node_operation::*;
 
 // xc (t)= Ac [1 + amn(t)] cos(2πfc t)
 

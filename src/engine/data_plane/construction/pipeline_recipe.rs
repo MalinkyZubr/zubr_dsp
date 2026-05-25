@@ -1,12 +1,12 @@
-use crate::engine::communication_layer::comms_core::{
+use crate::engine::data_plane::communication_layer::comms_core::{
     channel_wrapped, WrappedReceiver, WrappedSender,
 };
-use crate::engine::construction_layer::unfinished_node_builder::UnfinishedNodeBuilder;
+use crate::engine::data_plane::construction::unfinished_node_builder::UnfinishedNodeBuilder;
 
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::engine::construction_layer::node_build_vector::PipelineBuildVector;
+use crate::engine::data_plane::construction::node_build_vector::PipelineBuildVector;
 
 pub struct RecipeInputMapping<T: Sharable> {
     inputs: Vec<WrappedReceiver<T>>,

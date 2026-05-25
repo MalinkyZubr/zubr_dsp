@@ -1,5 +1,5 @@
-use crate::engine::communication_layer::data_management::DataWrapper;
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::data_management::DataWrapper;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
 use std::any::type_name;
 

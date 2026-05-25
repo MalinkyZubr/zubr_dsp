@@ -1,7 +1,7 @@
 use std::mem;
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::::pipeline_type_traits::Sharable;
 use num::{Num, NumCast};
 
 pub struct SimpleDownsampler<const INPUT_BUFFER_SIZE: usize, const OUTPUT_BUFFER_SIZE: usize> {

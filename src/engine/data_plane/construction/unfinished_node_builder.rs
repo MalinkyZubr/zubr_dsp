@@ -1,29 +1,56 @@
-use crate::engine::communication_layer::comms_core::{
+use crate::engine::data_plane::communication_layer::comms_core::{
     channel_wrapped, WrappedReceiver, WrappedSender,
 };
-use crate::engine::communication_layer::data_management::BufferArray;
-use crate::engine::construction_layer::node_build_vector::{NodeSubmissionClosure, PipelineBuildVector};
-use crate::engine::construction_layer::unfinished_node::UnfinishedNode;
-use crate::engine::structural::generic_node_operation::{
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::construction::node_build_vector::{NodeSubmissionClosure, PipelineBuildVector};
+use crate::engine::data_plane::construction::unfinished_node::UnfinishedNode;
+use crate::engine::data_plane::structural::generic_node_operation::{
     PipelineNodeOp, PipelineSink, PipelineSource,
 };
-use crate::engine::structural::generic_pipeline_node::RunModel;
-use crate::engine::structural::pipeline_type_traits::{Sharable, Unit};
+use crate::engine::data_plane::structural::generic_pipeline_node::RunModel;
+use crate::engine::data_plane::structural::pipeline_type_traits::{Sharable, Unit};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+
+#[derive(Debug, Clone)]
+pub enum PipelineInterfaceConfiguration {
+    GUI,
+    TermFull,
+    TermNoAnalytics,
+    Headless
+}
+
 
 #[derive(Clone)]
 pub struct PipelineParameters {
     pub max_in_flight: usize,
     pub num_compute_threads: usize,
-    pub debug_analytic_interval: Option<u64>
+    pub stop_broadcast_buffer_size: usize,
+    pub analytics_sink_buffer_size: usize,
+    pub debug_analytic_interval: Option<u64>,
+    pub verify_topology: bool,
+    pub pipeline_configuration: PipelineInterfaceConfiguration
 }
+
 impl PipelineParameters {
-    pub fn new(max_in_flight: usize, num_compute_threads: usize, debug_analytic_interval: Option<u64>) -> Self {
+    pub fn new(
+        max_in_flight: usize, 
+        num_compute_threads: usize, 
+        debug_analytic_interval: Option<u64>,
+        verify_topology: bool,
+        pipeline_configuration: PipelineInterfaceConfiguration,
+        stop_broadcast_buffer_size: usize,
+        analytics_sink_buffer_size: usize,
+    ) -> Self {
         Self {
             max_in_flight,
             num_compute_threads,
             debug_analytic_interval,
+            verify_topology,
+            pipeline_configuration,
+            stop_broadcast_buffer_size,
+            analytics_sink_buffer_size
         }
     }
 }
@@ -114,7 +141,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
         });
     }
 
-    // pub(in crate::engine::construction_layer::builders) fn attach_to_recipe_output(&mut self, new_id: usize) -> WrappedReceiver<O> {
+    // pub(in crate::engine::construction::builders) fn attach_to_recipe_output(&mut self, new_id: usize) -> WrappedReceiver<O> {
     //
     // }
 

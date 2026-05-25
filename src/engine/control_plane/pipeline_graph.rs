@@ -1,5 +1,5 @@
-use crate::engine::construction_layer::node_build_vector::{PipelineBuildVector, PreparedNode};
-use crate::engine::structural::generic_pipeline_node::GenericNode;
+use crate::engine::data_plane::construction::node_build_vector::{PipelineBuildVector, PreparedNode};
+use crate::engine::data_plane::structural::generic_pipeline_node::GenericNode;
 use crossbeam::utils::CachePadded;
 use log::{info, warn};
 use scc::HashMap as SCCHashMap;
@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time;
 use std::time::UNIX_EPOCH;
 use iced::widget::text::success;
+use crate::engine::control_plane::node_wrapper::NodeWrapper;
 
 #[derive(PartialEq, Debug)]
 pub enum PipelineNodeState {
@@ -50,35 +51,36 @@ impl PipelineNodeState {
 
 
 pub struct PipelineGraph {
-    nodes: SCCHashMap<usize, Box<dyn GenericNode>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
+    nodes: SCCHashMap<usize, NodeWrapper>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
     source_ids: Vec<usize>,
     sink_ids: Vec<usize>,
     initially_stateful_ids: Vec<usize>,
     num_nodes: usize,
 }
 impl PipelineGraph {
-    pub fn new(prepared_nodes: Vec<PreparedNode>) -> Self {
+    pub fn new(mut node_wrappers: Vec<NodeWrapper>) -> Self {
         let mut nodes = SCCHashMap::new();
         let mut source_ids = Vec::new();
         let mut sink_ids = Vec::new();
         let mut initially_stateful_ids = Vec::new();
 
-        let num_nodes = prepared_nodes.len();
+        let num_nodes = node_wrappers.len();
 
         info!("GRAPH NODE ID NAME MAPPINGS (FOR DEBUG):");
-        for prepared_node in prepared_nodes {
-            if prepared_node.node.is_source() {
-                source_ids.push(prepared_node.id);
+        for node_wrapper in node_wrappers.drain(..) {
+            if node_wrapper.is_source() {
+                source_ids.push(node_wrapper.get_id());
             }
-            else if prepared_node.node.is_sink() {
-                sink_ids.push(prepared_node.id);
+            else if node_wrapper.is_sink() {
+                sink_ids.push(node_wrapper.get_id());
             }
-            if prepared_node.node.has_initial_state() {
-                initially_stateful_ids.push(prepared_node.id);
+            if node_wrapper.has_initial_state() {
+                initially_stateful_ids.push(node_wrapper.get_id());
             }
-            match nodes.insert_sync(prepared_node.id, prepared_node.node) {
+            let node_id = node_wrapper.get_id();
+            match nodes.insert_sync(node_id, node_wrapper) {
                 Ok(_) => {}
-                Err(_) => panic!("Node {} already exists in the graph", prepared_node.id),
+                Err(_) => panic!("Node {} already exists in the graph", node_id),
             }
         }
         
@@ -90,8 +92,12 @@ impl PipelineGraph {
             num_nodes,
         }
     }
-
-    pub fn get_all_nodes(&self) -> Vec<Box<dyn GenericNode>> {
+    
+    pub fn get_num_nodes(&self) -> usize {
+        self.num_nodes
+    }
+    
+    pub fn get_all_nodes(&self) -> Vec<NodeWrapper> {
         let mut nodes = Vec::with_capacity(self.nodes.len());
 
         for id in 0..self.num_nodes {
@@ -192,19 +198,19 @@ impl PipelineGraph {
     // 
     // pub fn stop_all(&self) {}
     // 
-    // pub fn get_node(&self, id: usize) -> Option<(usize, Box<dyn GenericNode>)> {
-    //     self.mutable_state_map.remove_if_sync(&id, |_| true)
-    // }
+    pub fn get_node(&self, id: usize) -> Option<(usize, NodeWrapper)> {
+        self.nodes.remove_if_sync(&id, |_| true)
+    }
     // 
-    // pub fn place_node(&self, id: usize, node: Box<dyn GenericNode>) -> Option<()> {
-    //     self.mutable_state_map.insert_sync(id, node).ok()
-    // }
+    pub fn place_node(&self, id: usize, node: NodeWrapper) -> Option<()> {
+        self.nodes.insert_sync(id, node).ok()
+    }
 }
 
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
-//     use crate::engine::construction_layer::unfinished_node_builder::PipelineParameters;
+//     use crate::engine::construction::unfinished_node_builder::PipelineParameters;
 // 
 //     // Mock CollectibleNode for testing
 //     #[derive(Debug)]

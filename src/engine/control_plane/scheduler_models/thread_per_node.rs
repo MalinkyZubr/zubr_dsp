@@ -1,5 +1,5 @@
-use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
-use crate::engine::orchestration_layer::pipeline_graph::PipelineGraph;
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
+use crate::engine::control_plane::pipeline_graph::PipelineGraph;
 use log::info;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;

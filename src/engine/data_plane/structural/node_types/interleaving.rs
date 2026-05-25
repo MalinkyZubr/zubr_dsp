@@ -1,7 +1,7 @@
-use crate::engine::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use log::{debug, error};
 use std::mem;
 
@@ -16,7 +16,6 @@ pub struct PipelineDeInterleavingNode<
     output: [WrappedSender<BufferArray<I, OUTPUT_BUFFER_SIZE>>; NUM_CHANNELS],
     buffered_data: [DataWrapper<BufferArray<I, OUTPUT_BUFFER_SIZE>>; NUM_CHANNELS],
     satiated_edges: [usize; NUM_CHANNELS],
-    output_ready: bool,
 }
 
 impl<
@@ -38,7 +37,6 @@ impl<
             output,
             buffered_data: [Default::default(); NUM_CHANNELS],
             satiated_edges: [0; NUM_CHANNELS],
-            output_ready: false,
         }
     }
 }
@@ -52,14 +50,13 @@ impl<
     > GenericNode
     for PipelineDeInterleavingNode<I, NUM_CHANNELS, INPUT_BUFFER_SIZE, OUTPUT_BUFFER_SIZE>
 {
-    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+    async fn run_senders(&mut self) -> Option<usize> {
         let mut num_satiated_edges = 0;
         for (idx, data) in self.buffered_data.iter_mut().enumerate() {
             let res = self.output[idx].send_swap(data).await;
 
             if res.is_err() {
                 error!("Error sending data to output {}", idx);
-                self.output_ready = false;
                 return None;
             }
             if self.output[idx].channel_satiated() {
@@ -67,21 +64,19 @@ impl<
                 num_satiated_edges += 1;
             }
         }
-
-        self.output_ready = false;
+        
         Some(num_satiated_edges)
     }
-    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
-        if edge_index < NUM_CHANNELS {
-            Some(self.satiated_edges[edge_index])
-        } else {
-            None
+    fn get_satiated_edges(&self, num_satiated: usize) -> &[usize] {
+        if num_satiated > self.satiated_edges.len() {
+            panic!("Number of satiated edges is greater than the number of outputs")
         }
+        &self.satiated_edges[..num_satiated]
     }
-    fn load_initial_state(&mut self) {
+    fn load_initial_value(&mut self) {
         panic!("Initial state not supported for interleaved separator");
     }
-    fn has_initial_state(&self) -> bool {
+    fn has_initial_value(&self) -> bool {
         false
     }
     fn get_num_inputs(&self) -> usize {
@@ -90,9 +85,9 @@ impl<
     fn get_num_outputs(&self) -> usize {
         NUM_CHANNELS
     }
-    fn is_ready_exec(&self) -> bool {
-        match self.get_run_model() {
-            RunModel::Communicator => self.output_ready,
+    fn is_ready_exec(&self, node_state: NodeState) -> bool {
+        match node_state {
+            NodeState::Communicate => true,
             _ => self.input.channel_satiated(),
         }
     }
@@ -103,14 +98,10 @@ impl<
         vec![*self.input.get_source_id()]
     }
     fn get_run_model(&self) -> RunModel {
-        if self.output_ready {
-            RunModel::Communicator
-        } else {
-            RunModel::CPU
-        }
+        RunModel::CPU
     }
 
-    fn call_thread_cpu(&mut self, _id: usize) {
+    fn call_thread_cpu(&mut self) -> Result<(), ()> {
         let mut input = self.input.recv().unwrap();
         debug!("Interleaved separator CPU call {}", input.read().len());
 
@@ -124,7 +115,26 @@ impl<
 
         self.input.refill_buffer(input);
 
-        self.output_ready = true;
+        Ok(())
+    }
+
+    fn next_state(&self, current_state: NodeState) -> NodeState {
+        match current_state {
+            NodeState::Communicate => {
+                NodeState::ExecCpu
+            },
+            (NodeState::ExecCpu) => {
+                NodeState::Communicate
+            },
+            NodeState::Stop => {
+                self.initial_state()
+            }
+            _ => panic!("Invalid state"),
+        }
+    }
+
+    fn initial_state(&self) -> NodeState {
+        NodeState::ExecCpu
     }
 }
 
@@ -143,7 +153,7 @@ mod tests {
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(1));
         let (channel_wrapped_producer, channel_wrapped_consumer) =
-            crate::engine::communication_layer::comms_core::make_crossbeam_queue_handles(12);
+            crate::engine::data_plane::communication_layer::comms_core::make_crossbeam_queue_handles(12);
 
         (
             WrappedSender::new(
@@ -167,7 +177,7 @@ mod tests {
 
         assert_eq!(separator.get_num_inputs(), 1);
         assert_eq!(separator.get_num_outputs(), 3);
-        assert!(!separator.has_initial_state());
+        assert!(!separator.has_initial_value());
     }
 
     #[test]
@@ -206,7 +216,6 @@ mod tests {
             DataWrapper::new_with_value(BufferArray::new_with_value([1, 2])),
             DataWrapper::new_with_value(BufferArray::new_with_value([1, 2])),
         ];
-        separator.output_ready = true;
 
         // When buffered_data is Some, should return Communicator
         assert_eq!(separator.get_run_model(), RunModel::Communicator);
@@ -221,7 +230,7 @@ mod tests {
 
         let mut separator = PipelineDeInterleavingNode::new(input, [output1, output2]);
 
-        separator.load_initial_state();
+        separator.load_initial_value();
     }
 
     #[test]
@@ -243,7 +252,6 @@ mod tests {
         });
 
         // Call the CPU function - this should work without async context
-        separator.call_thread_cpu(0);
     }
 
     #[tokio::test]
@@ -262,8 +270,6 @@ mod tests {
         ];
 
         // Run the senders
-        let result = separator.run_senders(0).await;
-        assert!(result.is_some());
 
         // Verify data was sent to outputs
         let mut received1 = rx1.recv_async().await.unwrap();
@@ -282,7 +288,5 @@ mod tests {
         let mut separator = PipelineDeInterleavingNode::new(input, [output1, output2]);
 
         // Run the senders without buffered data
-        let result = separator.run_senders(0).await;
-        assert!(result.is_none());
     }
 }

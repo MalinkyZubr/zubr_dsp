@@ -1,7 +1,7 @@
 use super::rodio_source::*;
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
-use crate::engine::structural::pipeline_type_traits::*;
+use crate::engine::data_plane::::data_management::*;
+use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::::pipeline_type_traits::*;
 use rodio::Sink as RodioSink;
 use rodio::{
     ChannelCount, OutputStream, OutputStreamBuilder, Sample, SampleRate, Source as RodioSource,

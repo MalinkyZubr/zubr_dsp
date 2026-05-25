@@ -5,11 +5,10 @@
 #![allow(dead_code)]
 #![feature(generic_const_exprs)]
 #![feature(array_try_from_fn)]
-
-
+#![feature(unboxed_closures)]
 extern crate core;
 
-use crate::engine::orchestration_layer::logging::init_stdout_logger;
+use crate::engine::control_plane::logging::init_stdout_logger;
 use log::Level;
 use std::sync::Once;
 
@@ -23,7 +22,7 @@ pub fn initiate_pipeline(log_level: Level) {
     INIT.call_once(|| if let Err(_) = init_stdout_logger(log_level) {});
 }
 
-// use engine::orchestration_layer::logging::initialize_logger;
+// use engine::control_plane::logging::initialize_logger;
 //
 //
 // mod engine;

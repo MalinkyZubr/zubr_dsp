@@ -1,5 +1,5 @@
 use log::info;
-use crate::engine::structural::generic_pipeline_node::GenericNode;
+use crate::engine::data_plane::structural::generic_pipeline_node::GenericNode;
 
 
 pub struct PreparedNode {

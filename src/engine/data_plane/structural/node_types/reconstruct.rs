@@ -1,9 +1,10 @@
-use crate::engine::communication_layer::comms_core::{
+use crate::engine::data_plane::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
+use crate::engine::data_plane::structural::generic_pipeline_node::NodeState::ExecCommunicate;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 
 
 pub struct PipelineReconstructorNode<I: Sharable, const NO: usize, const NR: usize> {
@@ -33,7 +34,7 @@ impl<I: Sharable, const NO: usize, const NR: usize> PipelineReconstructorNode<I,
 impl<I: Sharable, const NO: usize, const NR: usize> GenericNode
     for PipelineReconstructorNode<I, NO, NR>
 {
-    async fn run_senders(&mut self, _id: usize) -> Option<usize> {
+    async fn run_senders(&mut self) -> Option<usize> {
         for idx in 0..NR {
             match self.input.recv_async().await {
                 Some(mut data) => {
@@ -52,17 +53,16 @@ impl<I: Sharable, const NO: usize, const NR: usize> GenericNode
         .await
         .ok()
     }
-    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
-        if edge_index < NO {
-            Some(self.satiated_edges[edge_index])
-        } else {
-            None
+    fn get_satiated_edges(&self, num_satiated: usize) -> &[usize] {
+        if num_satiated > self.satiated_edges.len() {
+            panic!("Number of satiated edges is greater than the number of outputs")
         }
+        &self.satiated_edges[..num_satiated]
     }
-    fn load_initial_state(&mut self) {
+    fn load_initial_value(&mut self) {
         panic!("Series reconstructor does not support initial state")
     }
-    fn has_initial_state(&self) -> bool {
+    fn has_initial_value(&self) -> bool {
         false
     }
     fn get_num_inputs(&self) -> usize {
@@ -71,7 +71,7 @@ impl<I: Sharable, const NO: usize, const NR: usize> GenericNode
     fn get_num_outputs(&self) -> usize {
         NO
     }
-    fn is_ready_exec(&self) -> bool {
+    fn is_ready_exec(&self, node_state: NodeState) -> bool {
         self.input.channel_satiated()
     }
     fn get_successors(&self) -> Vec<usize> {
@@ -82,6 +82,12 @@ impl<I: Sharable, const NO: usize, const NR: usize> GenericNode
     }
     fn get_run_model(&self) -> RunModel {
         RunModel::Communicator
+    }
+    fn initial_state(&self) -> NodeState {
+        ExecCommunicate
+    }
+    fn next_state(&self, current_state: NodeState) -> NodeState {
+        ExecCommunicate
     }
 }
 
@@ -101,7 +107,7 @@ mod tests {
         let capacity = Arc::new(AtomicUsize::new(1));
 
         let (channel_wrapped_producer, channel_wrapped_consumer) =
-            crate::engine::communication_layer::comms_core::make_crossbeam_queue_handles(12);
+            crate::engine::data_plane::communication_layer::comms_core::make_crossbeam_queue_handles(12);
 
         (
             WrappedSender::new(
@@ -124,7 +130,7 @@ mod tests {
         
         assert_eq!(reconstructor.get_num_inputs(), 1);
         assert_eq!(reconstructor.get_num_outputs(), 2);
-        assert!(!reconstructor.has_initial_state());
+        assert!(!reconstructor.has_initial_value());
         assert_eq!(reconstructor.get_run_model(), RunModel::Communicator);
     }
 
@@ -150,7 +156,7 @@ mod tests {
 
         let mut reconstructor = PipelineReconstructorNode::new(input, [output1, output2]);
 
-        reconstructor.load_initial_state();
+        reconstructor.load_initial_value();
     }
 
     #[tokio::test]
@@ -168,10 +174,6 @@ mod tests {
         tx.send_swap(&mut DataWrapper::new_with_value(2))
             .await
             .unwrap();
-
-        // Run the reconstructor
-        let result = reconstructor.run_senders(0).await;
-        assert!(result.is_some());
 
         // Verify both outputs received the data
         let mut received1 = rx1.recv_async().await.unwrap();

@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Seek};
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
 pub struct RawFileSource<const BUFFER_SIZE: usize> {
     file_path: String,
     file: File,

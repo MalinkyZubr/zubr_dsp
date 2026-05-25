@@ -1,10 +1,10 @@
-use crate::engine::communication_layer::comms_core::{
+use crate::engine::data_plane::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
-use crate::engine::communication_layer::data_management::DataWrapper;
-use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::data_management::DataWrapper;
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
 use std::mem;
 
@@ -118,23 +118,21 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
         } else {
             result = None
         }
-        self.output_ready = false;
         result
     }
-    fn check_nth_satiated_edge_id(&self, edge_index: usize) -> Option<usize> {
-        if edge_index < NO {
-            Some(self.satiated_edges[edge_index])
-        } else {
-            None
+    fn get_satiated_edges(&self, num_satiated: usize) -> &[usize] {
+        if num_satiated > self.satiated_edges.len() {
+            panic!("Number of satiated edges is greater than the number of outputs")
         }
+        &self.satiated_edges[..num_satiated]
     }
-    fn load_initial_state(&mut self) {
+    fn load_initial_value(&mut self) {
         match self.initial_state.clone() {
             Some(val) => self.buffered_output = DataWrapper::new_with_value(val),
             None => (),
         }
     }
-    fn has_initial_state(&self) -> bool {
+    fn has_initial_value(&self) -> bool {
         self.initial_state.is_some()
     }
     fn get_num_inputs(&self) -> usize {
@@ -144,9 +142,9 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
         NO
     }
 
-    fn is_ready_exec(&self) -> bool {
-        match self.get_run_model() {
-            RunModel::Communicator => true,
+    fn is_ready_exec(&self, state: NodeState) -> bool {
+        match state {
+            NodeState::Communicate => true,
             _ => self.input.iter().all(|x| x.channel_satiated())
         }
     }
@@ -167,22 +165,51 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
         }
     }
 
-    fn call_thread_cpu(&mut self, _id: usize) {
+    fn call_thread_cpu(&mut self) -> Result<(), ()> {
         let _ = self.receive_input();
         let compute_result = self
             .step
             .run_cpu(&mut self.buffered_input, &mut self.buffered_output);
 
-        self.output_ready = compute_result.is_ok() && !self.is_sink();
+        compute_result
     }
 
-    async fn call_thread_io(&mut self, _id: usize) {
+    async fn call_thread_io(&mut self) -> Result<(), ()> {
         let _ = self.receive_input_async().await;
         let compute_result = self
             .step
             .run_io(&mut self.buffered_input, &mut self.buffered_output)
             .await;
 
-        self.output_ready = compute_result.is_ok() && !self.is_sink();
+        compute_result
+    }
+
+    fn next_state(&self, current_state: NodeState) -> NodeState {
+        match current_state {
+            NodeState::Communicate => {
+                self.run_model.to_state()
+            },
+            (NodeState::ExecIo | NodeState::ExecCpu) => {
+                if self.get_num_outputs() == 0 {
+                    self.run_model.to_state()
+                }
+                else {
+                    NodeState::Communicate
+                }
+            },
+            NodeState::Stop => {
+                self.initial_state()
+            }
+            _ => panic!("Invalid state"),
+        }
+    }
+
+    fn initial_state(&self) -> NodeState {
+        if self.has_initial_value() {
+            NodeState::Communicate
+        }
+        else {
+            self.run_model.to_state()
+        }
     }
 }

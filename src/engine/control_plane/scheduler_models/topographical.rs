@@ -1,12 +1,14 @@
-use crate::engine::structural::generic_pipeline_node::{GenericNode, RunModel};
-use crate::engine::orchestration_layer::pipeline_graph::PipelineGraph;
+use std::pin::Pin;
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
+use crate::engine::control_plane::pipeline_graph::PipelineGraph;
 use log::{debug, error, info, trace, warn};
 use rayon::{ThreadPool as RayonPool, ThreadPoolBuilder as RayonBuilder};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use tokio::runtime::{Handle, Runtime};
-use crate::engine::construction_layer::unfinished_node_builder::PipelineParameters;
-use crate::engine::orchestration_layer::pipeline_hl::PipelineScheduler;
+use crate::engine::control_plane::node_wrapper::{CommTask, NodeWrapper, RunType};
+use crate::engine::data_plane::construction::unfinished_node_builder::PipelineParameters;
+use crate::engine::control_plane::pipeline_hl::PipelineScheduler;
 
 pub trait ThreadTaskTopographical {
     fn execute(&mut self) -> (Vec<Arc<dyn ThreadTaskTopographical>>, bool);
@@ -67,7 +69,7 @@ impl ThreadPoolTopographical {
         running
     }
 
-    fn task_starting_point(thread_pool: Weak<Self>, node_id: usize, async_handle: &Handle) {
+    fn task_starting_point(thread_pool: Weak<Self>, node_id: usize, async_handle: Handle) {
         debug!("Attempting to execute task for node {}", node_id);
 
         match thread_pool.upgrade() {
@@ -98,81 +100,41 @@ impl ThreadPoolTopographical {
         }
     }
     
-    fn not_ready_handler(thread_pool: Arc<Self>, id: usize, node: Box<dyn GenericNode>, task_type: &str) {
-        debug!(
-                        "Node {} not ready for {} execution, placing back in graph",
-                        id, task_type
-                    );
-        thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
-            error!("Failed to place node {} back in graph - node not found (should be impossible)", id);
-            panic!("Node not found in graph (should be impossible)")
-        });
-    }
-    
-    fn stage_compute_task(
+    fn direct_run_task(
         thread_pool: Arc<Self>,
         id: usize,
-        node: Box<dyn GenericNode>,
-        async_handle: &Handle,
+        run_task: RunType,
+        async_handle: Handle,
     ) {
-        if !node.is_ready_exec() {
-            Self::not_ready_handler(thread_pool, id, node, "cpu");
-        }
-        else {
-            info!("Spawning CPU task for node {}", id);
-            let async_handle_clone = async_handle.clone();
-            let thread_pool_clone = thread_pool.clone();
-            thread_pool.thread_pool.spawn(move || {
-                Self::thread_compute_task(thread_pool_clone, id, node, &async_handle_clone);
-            });
-        }
-    }
-    
-    fn stage_io_task(
-        thread_pool: Arc<Self>,
-        id: usize,
-        node: Box<dyn GenericNode>,
-        async_handle: &Handle,
-    ) {
-        if !node.is_ready_exec() {
-            Self::not_ready_handler(thread_pool, id, node, "io");
-        }
-        else {
-            info!("Spawning async IO task for node {}", id);
-            let async_handle_clone = async_handle.clone();
-            let thread_pool_clone = thread_pool.clone();
-            async_handle.spawn(async move {
-                Self::async_compute_task(thread_pool_clone, id, node, &async_handle_clone)
-                    .await;
-            });
-        }
-    }
-    
-    fn stage_comm_task(
-        thread_pool: Arc<Self>,
-        id: usize,
-        node: Box<dyn GenericNode>,
-        async_handle: &Handle,
-    ) {
-        if !node.is_ready_exec() || node.is_sink() {
-            Self::not_ready_handler(thread_pool, id, node, "comms");
-        }
-        else {
-            info!("Spawning async communicator task for node {}", id);
-            let thread_pool_clone = thread_pool.clone();
-            let cloned_handle = async_handle.clone();
-            async_handle.spawn(async move {
-                Self::async_sender_task(thread_pool_clone, id, node, &cloned_handle).await
-            });
-        }
+        let thread_pool_clone = thread_pool.clone();
+        let cloned_handle = async_handle.clone();
         
+        match run_task {
+            RunType::CPU(task) => {
+                thread_pool.thread_pool.spawn(move || {
+                    let node = task();
+                    Self::stage_task(thread_pool_clone, id, node, async_handle);
+                });
+            },
+            RunType::IO(task) => {
+                async_handle.spawn(async move {
+                    let node = Pin::from(task).await;
+                    Self::stage_task(thread_pool_clone, id, node, cloned_handle);
+                });
+            },
+            RunType::COMM(task) => {
+                async_handle.spawn(async move {
+                    Self::async_sender_task(thread_pool_clone, id, task, cloned_handle).await;
+                });
+            }
+        }
     }
 
     fn stage_task(
         thread_pool: Arc<Self>,
         id: usize,
-        node: Box<dyn GenericNode>,
-        async_handle: &Handle,
+        node: NodeWrapper,
+        async_handle: Handle,
     ) {
         if !thread_pool.is_running() { // if the pipeline is stopped, put the node back so it doesnt run
             thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
@@ -181,18 +143,21 @@ impl ThreadPoolTopographical {
             return;
         }
         
-        let run_model = node.get_run_model();
-        debug!("Node {} has run model: {:?}", id, run_model);
-
-        match run_model {
-            RunModel::CPU => {
-                Self::stage_compute_task(thread_pool, id, node, async_handle);
+        let run = node.generate_run();
+        
+        match run {
+            Ok(run) => {
+                Self::direct_run_task(
+                    thread_pool,
+                    id,
+                    run,
+                    async_handle,
+                )
             }
-            RunModel::IO => {
-                Self::stage_io_task(thread_pool, id, node, async_handle);
-            }
-            RunModel::Communicator => {
-                Self::stage_comm_task(thread_pool, id, node, async_handle);
+            Err(node) => {
+                thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
+                    panic!("Node not found in graph (should never happen)")
+                });
             }
         }
     }
@@ -200,27 +165,27 @@ impl ThreadPoolTopographical {
     async fn async_sender_task(
         thread_pool: Arc<Self>,
         id: usize,
-        mut node: Box<dyn GenericNode>,
-        async_handle: &Handle,
+        task: CommTask,
+        async_handle: Handle,
     ) { // no need for analytics on the sender task, that should depend only on data size and be totally predictable. Analytics are for algorithm analysis, not for OS benchmarking.
         // funny what things become simpler when you think
         debug!("Starting async sender task for node {}", id);
 
-        let satiated_channels = node.run_senders(id).await;
+        let (node, satiated_channels) = Pin::from(task).await;
         let downgraded = Arc::downgrade(&thread_pool.clone());
 
         match satiated_channels {
-            Some(successor_ids) => {
+            Some(num_channels) => {
                 debug!(
                     "Node {} sender task completed, triggering {} successors",
-                    id, successor_ids
+                    id, num_channels
                 );
-                for successor_id in 0..successor_ids {
-                    trace!("Triggering successor node {}", successor_id);
+                for id in node.get_satiated_edges(num_channels) {
+                    let async_handle_clone = async_handle.clone();
                     Self::task_starting_point(
                         downgraded.clone(),
-                        node.check_nth_satiated_edge_id(successor_id).unwrap(),
-                        async_handle,
+                        *id,
+                        async_handle_clone,
                     );
                 }
             }
@@ -234,57 +199,6 @@ impl ThreadPoolTopographical {
 
         debug!("Rescheduling node {} after sender task completion", id);
         Self::stage_task(thread_pool.clone(), id, node, async_handle);
-    }
-
-    async fn async_compute_task(
-        thread_pool: Arc<Self>,
-        id: usize,
-        mut node: Box<dyn GenericNode>,
-        async_handle: &Handle,
-    ) {
-        debug!("Starting async compute task for node {}", id);
-        let start = std::time::Instant::now();
-
-        node.call_thread_io(id).await;
-
-        let execution_time = start.elapsed().as_nanos() as u64;
-        trace!(
-            "Node {} async compute task completed in {} ns",
-            id,
-            execution_time
-        );
-
-        thread_pool.graph.update_analytics(id, execution_time);
-
-        debug!(
-            "Rescheduling node {} after async compute task completion",
-            id
-        );
-        Self::stage_task(thread_pool, id, node, async_handle);
-    }
-
-    fn thread_compute_task(
-        thread_pool: Arc<Self>,
-        id: usize,
-        mut node: Box<dyn GenericNode>,
-        async_handle: &Handle,
-    ) {
-        debug!("Starting CPU compute task for node {}", id);
-        let start = std::time::Instant::now();
-
-        node.call_thread_cpu(id);
-
-        let execution_time = start.elapsed().as_nanos() as u64;
-        trace!(
-            "Node {} CPU compute task completed in {} ns",
-            id,
-            execution_time
-        );
-
-        thread_pool.graph.update_analytics(id, execution_time);
-
-        debug!("Rescheduling node {} after CPU compute task completion", id);
-        Self::stage_task(thread_pool, id, node, async_handle);
     }
 }
 
@@ -344,7 +258,7 @@ impl PipelineScheduler for ThreadPoolTopographicalHandle {
         let weak_ref = Arc::downgrade(&self.master_pool);
         for node in &start_nodes {
             let async_handle = self.async_runtime.handle();
-            ThreadPoolTopographical::task_starting_point(weak_ref.clone(), *node, async_handle);
+            ThreadPoolTopographical::task_starting_point(weak_ref.clone(), *node, async_handle.clone());
         }
         info!("All start nodes scheduled");
     }
@@ -365,8 +279,8 @@ impl PipelineScheduler for ThreadPoolTopographicalHandle {
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
-//     use crate::engine::construction_layer::build;
-//     use crate::engine::construction_layer::unfinished_node::PipelineParameters;
+//     use crate::engine::construction::build;
+//     use crate::engine::construction::unfinished_node::PipelineParameters;
 //     use std::cell::RefCell;
 //     use std::rc::Rc;
 //     use std::sync::atomic::Ordering;

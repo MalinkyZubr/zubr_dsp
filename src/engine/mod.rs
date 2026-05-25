@@ -1,7 +1,6 @@
-pub mod communication_layer;
-pub mod construction_layer;
-pub mod orchestration_layer;
-pub mod structural;
+pub mod control_plane;
 mod interface_layer;
+pub(crate) mod data_plane;
+pub mod build;
 //mod dummy;
 //mod curses;

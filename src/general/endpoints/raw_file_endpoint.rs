@@ -1,8 +1,8 @@
-use crate::engine::structural::pipeline_type_traits::SharableNum;
+use crate::engine::data_plane::::pipeline_type_traits::SharableNum;
 use std::fs::File;
 use std::io::Write;
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::{PipelineSink, PipelineNodeOp};
+use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::::generic_node_operation::{PipelineSink, PipelineNodeOp};
 use std::mem::size_of;
 use log::{error, warn};
 use num_traits::ToBytes;

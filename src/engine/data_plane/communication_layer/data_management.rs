@@ -1,4 +1,4 @@
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use std::mem::swap;
 
 #[derive(Copy, Clone, Default)]

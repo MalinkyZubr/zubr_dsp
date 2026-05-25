@@ -1,36 +1,62 @@
+use scc::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize};
-use std::time;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use crate::engine::orchestration_layer::pipeline_graph::PipelineNodeState;
-use crossbeam_queue::ArrayQueue;
-use tokio::sync::Notify;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::task::JoinSet;
-use crate::engine::structural::generic_pipeline_node::GenericNode;
 
 pub struct PipelineAnalyticsSink {
-    analytic_receiver: Receiver<NodeAnalytics>,
+    analytic_receiver: Option<Receiver<NodeAnalytics>>,
     analytic_sender: Sender<NodeAnalytics>,
+    analytic_storage: Arc<HashMap<usize, NodeAnalytics>>,
 }
 impl PipelineAnalyticsSink {
     pub fn new(channel_size: usize) -> PipelineAnalyticsSink {
         let (sender, receiver) = channel(channel_size);
         PipelineAnalyticsSink {
-            analytic_receiver: receiver,
+            analytic_receiver: Some(receiver),
             analytic_sender: sender,
+            analytic_storage: Arc::new(HashMap::new()),
+        }
+    }
+    pub fn check_task_started(&self) -> bool {
+        self.analytic_receiver.is_none()
+    }
+
+    pub fn generate_source(&self, id: usize) -> PipelineAnalyticsSource {
+        PipelineAnalyticsSource::new(self.analytic_sender.clone(), id)
+    }
+
+    pub async fn get_analytics_task(
+        mut analytic_receiver: Receiver<NodeAnalytics>,
+        analytic_storage: Arc<HashMap<usize, NodeAnalytics>>,
+    ) -> () {
+        let analytic = analytic_receiver.recv().await;
+        match analytic {
+            Some(analytic) => {
+                let _ = analytic_storage.insert_async(analytic.id, analytic).await;
+            }
+            None => (),
         }
     }
     
-    pub fn generate_source(&self) -> Sender<NodeAnalytics> {
-        self.analytic_sender.clone()
+    pub async fn get_analytics_direct(&mut self) {
+        let analytic = self.analytic_receiver.as_mut().unwrap().recv().await;
+        match analytic {
+            Some(analytic) => {
+                let _ = self.analytic_storage.insert_async(analytic.id, analytic).await;
+            }
+            None => (),
+        }
     }
-    
-    pub async fn get_analytics(&mut self) -> NodeAnalytics {
-        self.analytic_receiver.recv().await.unwrap()
+
+    pub fn get_analytics(&self, id: usize) -> Option<NodeAnalytics> {
+        match self.analytic_storage.get_sync(&id) {
+            Some(value) => Some(value.clone()),
+            None => None,
+        }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct NodeAnalytics {
@@ -47,7 +73,7 @@ pub struct PipelineAnalyticsSource {
     last_execution_time_ns: u128,
     last_execution_instant_sec: u64,
     current_state: u8,
-    start: Instant
+    start: Instant,
 }
 impl PipelineAnalyticsSource {
     pub fn new(sender: Sender<NodeAnalytics>, id: usize) -> PipelineAnalyticsSource {
@@ -59,7 +85,7 @@ impl PipelineAnalyticsSource {
             last_execution_instant_sec: 0,
             current_state: 0,
             start: Instant::now(),
-        }   
+        }
     }
 
     pub fn enter_execution(&mut self) {
@@ -77,7 +103,7 @@ impl PipelineAnalyticsSource {
             .as_secs();
         let _ = self.analytic_sender.try_send(self.to_analytics());
     }
-    
+
     pub fn to_analytics(&self) -> NodeAnalytics {
         NodeAnalytics {
             id: self.id,

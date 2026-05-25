@@ -1,8 +1,8 @@
 use log::error;
 use crate::dsp::modulation::am::am_mod::AMModulator;
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::pipeline_type_traits::*;
-use crate::engine::structural::generic_node_operation::*;
+use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
+use crate::engine::data_plane::::pipeline_type_traits::*;
+use crate::engine::data_plane::::generic_node_operation::*;
 
 
 pub struct AMDemodulator<const BUFFER_SIZE: usize> {
