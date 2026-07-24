@@ -7,6 +7,7 @@ use crate::engine::data_plane::construction::node_build_vector::PreparedNode;
 use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState};
 use std::future::Future;
 use std::sync::Arc;
+use log::{debug, error, warn};
 use tokio::sync::watch::Receiver as WatchReceiver;
 
 pub fn wrap_prepared_nodes(
@@ -29,14 +30,14 @@ pub fn wrap_prepared_nodes(
                     external_stop_source.register_endpoint(id),
                 );
                 match analytics_sink {
-                    Some(sink) => wrapper.attach_analytics_source(sink.generate_source(id)),
+                    Some(sink) => wrapper.attach_analytics_source(&sink),
                     _ => ()
                 }
                 wrapper
             } else {
                 let mut wrapper = NodeWrapper::new_general_node(node, &internode_stopping_authority_factory);
                 match analytics_sink {
-                    Some(sink) => wrapper.attach_analytics_source(sink.generate_source(id)),
+                    Some(sink) => wrapper.attach_analytics_source(&sink),
                     _ => ()
                 }
                 wrapper
@@ -102,10 +103,11 @@ impl NodeWrapper {
 
     fn wrapped_run_exec_cpu(mut wrapper: Self) -> CPUTask {
         Box::new(move || {
+            debug!("Run task {}, state: {:?}", wrapper.id, wrapper.state_manager.get_state());
             wrapper.state_manager.update_state(&wrapper.node);
             let result;
             match wrapper.analytic_source.as_mut() {
-                Some(mut analytic_source) => {
+                Some(analytic_source) => {
                     analytic_source.enter_execution();
                     result = wrapper.node.call_thread_cpu();
                     analytic_source.exit_execution();
@@ -122,10 +124,11 @@ impl NodeWrapper {
 
     fn wrapped_run_exec_io(mut wrapper: Self) -> IOTask {
         Box::new(async move {
+            debug!("Run task {}, state: {:?}", wrapper.id, wrapper.state_manager.get_state());
             wrapper.state_manager.update_state(&wrapper.node);
             let result;
             match wrapper.analytic_source.as_mut() {
-                Some(mut analytic_source) => {
+                Some(analytic_source) => {
                     analytic_source.enter_execution();
                     result = wrapper.node.call_thread_io().await;
                     analytic_source.exit_execution();
@@ -140,10 +143,11 @@ impl NodeWrapper {
         mut wrapper: Self,
     ) -> CommTask {
         Box::new(async move {
+            debug!("Run task {}, state: {:?}", wrapper.id, wrapper.state_manager.get_state());
             wrapper.state_manager.update_state(&wrapper.node);
-            let mut successors;
+            let successors;
             match wrapper.analytic_source.as_mut() {
-                Some(mut analytic_source) => {
+                Some(analytic_source) => {
                     analytic_source.enter_execution();
                     successors = wrapper.node.run_senders().await;
                     analytic_source.exit_execution();
@@ -158,13 +162,16 @@ impl NodeWrapper {
         mut wrapper: Self,
     ) -> CommTask {
         Box::new(async move {
+            wrapper.state_manager.update_state(&wrapper.node);
             let successors = wrapper.node.run_senders().await;
             (wrapper, successors)
         })
     }
 
-    pub fn generate_run(mut self) -> Result<RunType, Self> {
-        if self.node.is_ready_exec(self.state_manager.get_state()) {
+    pub fn generate_run(self) -> Result<RunType, Self> {
+        debug!("Generating run for {}", self.name);
+        if !self.node.is_ready_exec(self.state_manager.get_state()) {
+            warn!("Node {} not ready to execute", self.id);
             return Err(self);
         }
         match self.state_manager.get_state() {
@@ -176,7 +183,8 @@ impl NodeWrapper {
         }
     }
 
-    pub fn attach_analytics_source(&mut self, source: PipelineAnalyticsSource) {
+    pub fn attach_analytics_source(&mut self, sink: &PipelineAnalyticsSink) {
+        let source = sink.generate_source(self.id, self.name.clone(), self.node.get_run_model());
         self.analytic_source = Some(source);
     }
 
@@ -201,6 +209,7 @@ impl NodeWrapper {
     }
 
     pub fn is_ready_exec(&self) -> bool {
+        debug!("Checking if wrapper is ready to execute");
         self.node.is_ready_exec(self.state_manager.get_state())
     }
 

@@ -4,7 +4,8 @@ use num_traits::NumCast;
 use num_traits::Num;
 
 
-pub trait Sharable = Send + Sync + Clone + Copy + Default + 'static;
+pub trait Sharable = Send + Sync + Clone + Default + 'static;
+pub trait SharableCopy = Sharable + Copy;
 pub trait SharableNum = Sharable + Num<FromStrRadixErr=()> + NumCast;
 
 pub trait Unit: Send + Clone {

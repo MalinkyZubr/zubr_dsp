@@ -1,13 +1,12 @@
 use crate::engine::data_plane::communication_layer::comms_core::{
     iterative_send, WrappedReceiver, WrappedSender,
 };
-use crate::engine::data_plane::communication_layer::data_management::DataWrapper;
 use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState, RunModel};
 use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
 use std::mem;
-
+use log::error;
 
 pub struct PipelineStandardNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     step: Box<dyn PipelineNodeOp<I, O, NI>>,
@@ -16,11 +15,9 @@ pub struct PipelineStandardNode<I: Sharable, O: Sharable, const NI: usize, const
     output: [WrappedSender<O>; NO],
     satiated_edges: [usize; NO],
 
-    initial_state: Option<O>,
-    buffered_output: DataWrapper<O>,
-    buffered_input: [DataWrapper<I>; NI],
-
-    output_ready: bool,
+    initial_value: Option<O>,
+    buffered_output: O,
+    buffered_input: [I; NI],
     run_model: RunModel,
 }
 impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineStandardNode<I, O, NI, NO> {
@@ -30,7 +27,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineStandar
         output: Vec<WrappedSender<O>>,
         initial_state: Option<O>,
         run_model: RunModel,
-    ) -> PipelineStandardNode<I, O, NI, NO> {
+    ) -> PipelineStandardNode<I, O, NI, NO> where O: Default, I: Default {
         assert_eq!(
             input.len(),
             NI,
@@ -55,19 +52,18 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> PipelineStandar
             _ => (),
         };
 
-        let (output_ready, buffered_data) = match initial_state.clone() {
-            Some(val) => (true, DataWrapper::new_with_value(val)),
-            None => (false, DataWrapper::new()),
+        let buffered_data = match initial_state.clone() {
+            Some(val) => val,
+            None => O::default(),
         };
         PipelineStandardNode {
             input,
             output,
             step,
             buffered_output: buffered_data,
-            initial_state,
+            initial_value: initial_state,
             satiated_edges: [0; NO],
-            buffered_input: [DataWrapper::new(); NI],
-            output_ready,
+            buffered_input: std::array::from_fn(|_| Default::default()),
             run_model,
         }
     }
@@ -107,17 +103,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
 {
     async fn run_senders(&mut self) -> Option<usize> {
         let result;
-        if self.output_ready {
-            result = iterative_send(
-                &mut self.output,
-                &mut self.satiated_edges,
-                &mut self.buffered_output,
-            )
-            .await
-            .ok()
-        } else {
-            result = None
-        }
+        result = iterative_send(
+            &mut self.output,
+            &mut self.satiated_edges,
+            &mut self.buffered_output,
+        )
+        .await
+        .ok();
         result
     }
     fn get_satiated_edges(&self, num_satiated: usize) -> &[usize] {
@@ -127,13 +119,13 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
         &self.satiated_edges[..num_satiated]
     }
     fn load_initial_value(&mut self) {
-        match self.initial_state.clone() {
-            Some(val) => self.buffered_output = DataWrapper::new_with_value(val),
+        match self.initial_value.clone() {
+            Some(val) => self.buffered_output = val,
             None => (),
         }
     }
     fn has_initial_value(&self) -> bool {
-        self.initial_state.is_some()
+        self.initial_value.is_some()
     }
     fn get_num_inputs(&self) -> usize {
         NI
@@ -158,11 +150,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
     }
 
     fn get_run_model(&self) -> RunModel {
-        if self.output_ready {
-            RunModel::Communicator
-        } else {
-            self.run_model
-        }
+        self.run_model
     }
 
     fn call_thread_cpu(&mut self) -> Result<(), ()> {
@@ -189,7 +177,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
             NodeState::Communicate => {
                 self.run_model.to_state()
             },
-            (NodeState::ExecIo | NodeState::ExecCpu) => {
+            NodeState::ExecIo | NodeState::ExecCpu => {
                 if self.get_num_outputs() == 0 {
                     self.run_model.to_state()
                 }
@@ -211,5 +199,21 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> GenericNode
         else {
             self.run_model.to_state()
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    //
+    //
+    // fn setup() -> PipelineStandardNode<i32, i32, 1, 1> {
+    //     let test_node = PipelineStandardNode::new()
+    // }
+    //
+    #[test]
+    fn test_state_machine() {
+
     }
 }

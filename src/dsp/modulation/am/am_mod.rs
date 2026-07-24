@@ -1,7 +1,5 @@
-use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
-use crate::engine::data_plane::::pipeline_type_traits::*;
-use crate::engine::data_plane::::generic_node_operation::*;
-
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 // xc (t)= Ac [1 + amn(t)] cos(2πfc t)
 
 
@@ -27,8 +25,8 @@ impl<const BUFFER_SIZE: usize> AMModulator<BUFFER_SIZE> {
     }
 }
 impl<const BUFFER_SIZE: usize> PipelineNodeOp<BufferArray<f32, BUFFER_SIZE>, BufferArray<f32, BUFFER_SIZE>, 1> for AMModulator<BUFFER_SIZE> {
-    fn run_cpu(&mut self, _input: &mut [DataWrapper<BufferArray<f32, BUFFER_SIZE>>; 1], _output: &mut DataWrapper<BufferArray<f32, BUFFER_SIZE>>) -> Result<(), ()> {
-        for (input_sample, output_sample) in _input[0].read().read_mut().iter().zip(_output.read().read_mut()) {
+    fn run_cpu(&mut self, _input: &mut [BufferArray<f32, BUFFER_SIZE>; 1], _output: &mut BufferArray<f32, BUFFER_SIZE>) -> Result<(), ()> {
+        for (input_sample, output_sample) in _input[0].read_mut().iter().zip(_output.read_mut()) {
             *output_sample = self.carrier_amplitude * 
                 (1f32 + self.modulation_index * input_sample)
                 * f32::cos(self.phase_accumulator);

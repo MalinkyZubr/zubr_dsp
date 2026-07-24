@@ -62,6 +62,9 @@ backtrace-on-stack-overflow = "0.3.0"
 fixed-vec-deque = "0.1.11"
 iced = { version = "0.14.0", features = ["image"] }
 iced_plot = "0.4.0"
+iced_table2 = "0.14.2"
+plotters-iced = "0.11.0"
+env_logger = "0.11.11"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

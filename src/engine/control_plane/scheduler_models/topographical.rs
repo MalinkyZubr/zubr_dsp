@@ -1,14 +1,14 @@
-use std::pin::Pin;
-use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
+use crate::engine::control_plane::node_wrapper::{CommTask, NodeWrapper, RunType};
 use crate::engine::control_plane::pipeline_graph::PipelineGraph;
+use crate::engine::control_plane::pipeline_hl::PipelineScheduler;
+use crate::engine::data_plane::construction::unfinished_node_builder::PipelineParameters;
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
 use log::{debug, error, info, trace, warn};
 use rayon::{ThreadPool as RayonPool, ThreadPoolBuilder as RayonBuilder};
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use tokio::runtime::{Handle, Runtime};
-use crate::engine::control_plane::node_wrapper::{CommTask, NodeWrapper, RunType};
-use crate::engine::data_plane::construction::unfinished_node_builder::PipelineParameters;
-use crate::engine::control_plane::pipeline_hl::PipelineScheduler;
 
 pub trait ThreadTaskTopographical {
     fn execute(&mut self) -> (Vec<Arc<dyn ThreadTaskTopographical>>, bool);
@@ -111,18 +111,21 @@ impl ThreadPoolTopographical {
         
         match run_task {
             RunType::CPU(task) => {
+                debug!("Run task {} as CPU", id);
                 thread_pool.thread_pool.spawn(move || {
                     let node = task();
                     Self::stage_task(thread_pool_clone, id, node, async_handle);
                 });
             },
             RunType::IO(task) => {
+                debug!("Run task {} as IO", id);
                 async_handle.spawn(async move {
                     let node = Pin::from(task).await;
                     Self::stage_task(thread_pool_clone, id, node, cloned_handle);
                 });
             },
             RunType::COMM(task) => {
+                debug!("Run task {} as COMM", id);
                 async_handle.spawn(async move {
                     Self::async_sender_task(thread_pool_clone, id, task, cloned_handle).await;
                 });
@@ -136,6 +139,7 @@ impl ThreadPoolTopographical {
         node: NodeWrapper,
         async_handle: Handle,
     ) {
+        debug!("Task staging for {} started", id);
         if !thread_pool.is_running() { // if the pipeline is stopped, put the node back so it doesnt run
             thread_pool.graph.place_node(id, node).unwrap_or_else(|| {
                 panic!("Node not found in graph (should never happen)")
@@ -143,10 +147,12 @@ impl ThreadPoolTopographical {
             return;
         }
         
+        debug!("Entering node generate run");
         let run = node.generate_run();
         
         match run {
             Ok(run) => {
+                debug!("Direct run task for {}", id);
                 Self::direct_run_task(
                     thread_pool,
                     id,
@@ -223,7 +229,7 @@ impl PipelineScheduler for ThreadPoolTopographicalHandle {
         
         let run_flag = thread_pool.get_run_flag();
         
-        let mut analytic_task;
+        let analytic_task;
         match pipeline_parameters.debug_analytic_interval {
             Some(interval) => {
                 let graph_clone = graph.clone();

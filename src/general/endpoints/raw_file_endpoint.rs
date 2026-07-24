@@ -1,11 +1,10 @@
-use crate::engine::data_plane::::pipeline_type_traits::SharableNum;
 use std::fs::File;
 use std::io::Write;
-use crate::engine::data_plane::::data_management::{BufferArray, DataWrapper};
-use crate::engine::data_plane::::generic_node_operation::{PipelineSink, PipelineNodeOp};
 use std::mem::size_of;
 use log::{error, warn};
 use num_traits::ToBytes;
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 
 pub struct RawFileSink<const BUFFER_SIZE: usize> {
     file_path: String,
@@ -28,9 +27,9 @@ impl<const BUFFER_SIZE: usize> RawFileSink<BUFFER_SIZE> {
 }
 
 impl<const BUFFER_SIZE: usize> PipelineNodeOp<BufferArray<u8, BUFFER_SIZE>, (), 1> for RawFileSink<BUFFER_SIZE> {
-    fn run_cpu(&mut self, _input: &mut [DataWrapper<BufferArray<u8, BUFFER_SIZE>>; 1], _output: &mut DataWrapper<()>) -> Result<(), ()> {
-        self.file.write_all(_input[0].read().read()).unwrap();
-        self.current_file_size += _input[0].read().read().len();
+    fn run_cpu(&mut self, _input: &mut [BufferArray<u8, BUFFER_SIZE>; 1], _output: &mut ()) -> Result<(), ()> {
+        self.file.write_all(_input[0].read()).unwrap();
+        self.current_file_size += _input[0].read().len();
 
         if self.current_file_size >= self.max_file_size && self.max_file_size != 0{
             error!("Reached maximum file size {}", self.max_file_size);

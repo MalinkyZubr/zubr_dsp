@@ -7,26 +7,21 @@ use num::Complex;
 use rodio::{OutputStreamBuilder, Sink};
 use tokio::runtime::Builder;
 use zubr_dsp::dsp::core::complex_magnitude::ComplexMagnitude;
-use zubr_dsp::dsp::core::converters::RealToComplex;
+use zubr_dsp::dsp::core::converters::{ComplexToReal, RealToComplex};
 use zubr_dsp::dsp::filtering::fir::fir::FIRFilter;
 use zubr_dsp::dsp::modulation::am::am_demod::AMDemodulator;
 use zubr_dsp::dsp::modulation::am::am_mod::AMModulator;
-use zubr_dsp::dsp::sampling::resampling::{Resampler, UpsamplingMethod};
-use zubr_dsp::dsp::sampling::simple_downsample::SimpleDownsampler;
 use zubr_dsp::dsp::system_response::fft::{FFT, IFFT};
-use zubr_dsp::dsp::system_response::overlap_save_chunks::{generate_overlap_save_steps, OverlapSaveBreaker, OverlapSaveCombiner};
+use zubr_dsp::dsp::system_response::overlap_save_chunks::generate_overlap_save_steps;
 use zubr_dsp::dsp::system_response::special_transfer_functions::tf_analytic;
-use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
-use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
-use zubr_dsp::general::throttle::Throttle;
-use zubr_dsp::engine::data_plane::::data_management::BufferArray;
-use zubr_dsp::engine::data_plane::::unfinished_node_builder::{PipelineParameters, UnfinishedNodeBuilder};
-use zubr_dsp::dsp::sampling::simple_downsample::*;
 use zubr_dsp::engine::build::build_pipeline;
 use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
 use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
-use zubr_dsp::engine::data_plane::::generic_pipeline_node::RunModel::{CPU, IO};
-use zubr_dsp::initiate_pipeline;
+use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, PipelineParameters, UnfinishedNodeBuilder};
+use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel::{CPU, IO};
+use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
+use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
+use zubr_dsp::general::throttle::Throttle;
 
 pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
     println!("Beginning breaker test\nEnter absolute path to mp3:");
@@ -37,8 +32,7 @@ pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
         .enable_all()
         .build()
         .unwrap());
-    
-    initiate_pipeline(Level::Info);
+
 
     let stream = OutputStreamBuilder::open_default_stream().unwrap();
     let aud_sink = Sink::connect_new(stream.mixer());
@@ -50,9 +44,10 @@ pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
             >();
 
             let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read line");
+            // io::stdin()
+            //     .read_line(&mut input)
+            //     .expect("Failed to read line");
+            input = String::from("/home/malinkyzubr/Documents/test.mp3");
 
             let mut source: UnfinishedNodeBuilder<_, _, 0, 1> = UnfinishedNodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "audio_source".to_string(),
@@ -61,18 +56,19 @@ pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
                 par,
                 CPU
             );
-            let mut step1: UnfinishedNodeBuilder<_, _, 1, 1> = source
-                .attach_standard("throttle".to_string(), Throttle::new(88.2e3), IO);
-            let mut step2: UnfinishedNodeBuilder<_, _, 1, 1> = step1.attach_standard("Chunker".to_string(), breaker, CPU);
-            let mut step3 = step2.attach_series_deconstructor::<1>("deconstructor".to_string());
-            let mut step4 = step3.attach_series_reconstructor::<1, 8>("reconstructor".to_string());
-            let mut step5: UnfinishedNodeBuilder<_, _, 1, 1>= step4.attach_standard("dechunker".to_string(), combiner, CPU);
-            
-            step5.add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
+            source.attach_standard::<_, 1, 1>("throttle".to_string(), Throttle::new(88.2e3), IO)
+                .attach_standard::<_, 1, 1>("Chunker".to_string(), breaker, CPU)
+                .attach_series_deconstructor::<1>("deconstructor".to_string())
+                .attach_standard::<_, 1, 1>("to complex".to_string(), RealToComplex::new(), CPU)
+                .attach_standard::<_, 1, 1>("fft".to_string(), FFT::new(), CPU)
+                .attach_standard::<_, 1, 1>("ifft".to_string(), IFFT::new(), CPU)
+                .attach_standard::<_, 1, 1>("to real".to_string(), ComplexToReal::new(), CPU)
+                .attach_series_reconstructor::<1, 8>("reconstructor".to_string())
+                .attach_standard::<_, 1, 1>("dechunker".to_string(), combiner, CPU)
+                .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
-        PipelineParameters::new(64, 5, None),
+        PipelineParameters::new(16, 5, None, false, PipelineInterfaceConfiguration::Headless, 5, 64),
         rt,
-        false
     ).unwrap();
 
 

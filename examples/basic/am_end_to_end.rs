@@ -19,13 +19,13 @@ use zubr_dsp::dsp::system_response::special_transfer_functions::tf_analytic;
 use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
-use zubr_dsp::engine::data_plane::::data_management::BufferArray;
-use zubr_dsp::engine::data_plane::::unfinished_node_builder::{PipelineParameters, UnfinishedNodeBuilder};
+use zubr_dsp::engine::data_plane::communication_layer::data_management::BufferArray;
+use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, PipelineParameters, UnfinishedNodeBuilder};
 use zubr_dsp::dsp::sampling::simple_downsample::*;
 use zubr_dsp::engine::build::build_pipeline;
 use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
 use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
-use zubr_dsp::engine::data_plane::::generic_pipeline_node::RunModel::{CPU, IO};
+use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel::{CPU, IO};
 use zubr_dsp::initiate_pipeline;
 
 pub fn am_end_to_end_test() -> Result<(), String> {
@@ -50,9 +50,10 @@ pub fn am_end_to_end_test() -> Result<(), String> {
             >();
 
             let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read line");
+            // io::stdin()
+            //     .read_line(&mut input)
+            //     .expect("Failed to read line");
+            input = String::from("/home/malinkyzubr/Documents/test.mp3");
 
             let mut source: UnfinishedNodeBuilder<_, _, 0, 1> = UnfinishedNodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
                 "audio_source".to_string(),
@@ -64,10 +65,11 @@ pub fn am_end_to_end_test() -> Result<(), String> {
             let carrier_amplitude = 10.0;
             let carrier_frequency = 1e8;
             let modulation_index = 0.5;
-            let sample_frequency = 2.5e8;
+            let sample_frequency = 2.5e6;
             
             source
                 .attach_standard::<_, 1, 1>("throttle".to_string(), Throttle::new(88.2e3), IO)
+                .attach_standard::<_, 1, 1>("upsampler".to_string(), Resampler::<_, 2048, 29, 1>::new(UpsamplingMethod::LinearInterpolation), CPU)
                 .attach_standard::<_, 1, 1>("AM Modulator".to_string(), AMModulator::new(carrier_amplitude, carrier_frequency, modulation_index, sample_frequency), CPU)
                 .attach_standard::<_, 1, 1>("Chunker".to_string(), breaker, CPU)
                 .attach_series_deconstructor::<1>("deconstructor".to_string())
@@ -81,9 +83,8 @@ pub fn am_end_to_end_test() -> Result<(), String> {
                 .attach_standard::<_, 1, 1>("demodulator".to_string(), AMDemodulator::new(carrier_amplitude, modulation_index), CPU)
                 .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
-        PipelineParameters::new(16, 5, None),
+        PipelineParameters::new(16, 5, None, false, PipelineInterfaceConfiguration::Headless, 5, 64),
         rt,
-        false
     ).unwrap();
     
     pipeline.start();

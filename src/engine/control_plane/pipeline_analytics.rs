@@ -4,7 +4,20 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use crate::engine::control_plane::node_wrapper::NodeWrapper;
+use crate::engine::data_plane::structural::generic_pipeline_node::RunModel;
 
+
+#[derive(Debug, Clone)]
+pub struct NodeAnalytics {
+    pub id: usize,
+    pub name: String,
+    pub run_model: RunModel,
+    pub num_executions: u128,
+    pub last_execution_time_ns: u128,
+    pub last_execution_instant_sec: u64,
+    pub current_state: u8,
+}
 pub struct PipelineAnalyticsSink {
     analytic_receiver: Option<Receiver<NodeAnalytics>>,
     analytic_sender: Sender<NodeAnalytics>,
@@ -23,8 +36,8 @@ impl PipelineAnalyticsSink {
         self.analytic_receiver.is_none()
     }
 
-    pub fn generate_source(&self, id: usize) -> PipelineAnalyticsSource {
-        PipelineAnalyticsSource::new(self.analytic_sender.clone(), id)
+    pub fn generate_source(&self, id: usize, name: String, run_model: RunModel) -> PipelineAnalyticsSource {
+        PipelineAnalyticsSource::new(self.analytic_sender.clone(), id, name, run_model)
     }
 
     pub async fn get_analytics_task(
@@ -58,17 +71,12 @@ impl PipelineAnalyticsSink {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NodeAnalytics {
-    id: usize,
-    num_executions: u128,
-    last_execution_time_ns: u128,
-    last_execution_instant_sec: u64,
-    current_state: u8,
-}
+
 pub struct PipelineAnalyticsSource {
     analytic_sender: Sender<NodeAnalytics>,
     id: usize,
+    name: String,
+    run_model: RunModel,
     num_executions: u128,
     last_execution_time_ns: u128,
     last_execution_instant_sec: u64,
@@ -76,10 +84,12 @@ pub struct PipelineAnalyticsSource {
     start: Instant,
 }
 impl PipelineAnalyticsSource {
-    pub fn new(sender: Sender<NodeAnalytics>, id: usize) -> PipelineAnalyticsSource {
+    pub fn new(sender: Sender<NodeAnalytics>, id: usize, name: String, run_model: RunModel) -> PipelineAnalyticsSource {
         PipelineAnalyticsSource {
             analytic_sender: sender,
             id,
+            name,
+            run_model,
             num_executions: 0,
             last_execution_time_ns: 0,
             last_execution_instant_sec: 0,
@@ -107,6 +117,8 @@ impl PipelineAnalyticsSource {
     pub fn to_analytics(&self) -> NodeAnalytics {
         NodeAnalytics {
             id: self.id,
+            name: self.name.clone(),
+            run_model: self.run_model.clone(),
             num_executions: self.num_executions,
             last_execution_time_ns: self.last_execution_time_ns,
             last_execution_instant_sec: self.last_execution_instant_sec,

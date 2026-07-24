@@ -1,10 +1,9 @@
 use super::rodio_source::*;
-use crate::engine::data_plane::::data_management::*;
-use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
-use crate::engine::data_plane::::pipeline_type_traits::*;
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 use rodio::Sink as RodioSink;
 use rodio::{
-    ChannelCount, OutputStream, OutputStreamBuilder, Sample, SampleRate, Source as RodioSource,
+    ChannelCount, Sample, SampleRate,
 };
 use thread_priority::{set_current_thread_priority, ThreadPriority};
 
@@ -31,10 +30,10 @@ impl<const BUFFER_SIZE: usize> PipelineNodeOp<BufferArray<Sample, BUFFER_SIZE>, 
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<Sample, BUFFER_SIZE>>; 1],
-        _output: &mut DataWrapper<()>,
+        input: &mut [BufferArray<Sample, BUFFER_SIZE>; 1],
+        _output: &mut (),
     ) -> Result<(), ()> {
-        let samples: Vec<Sample> = input[0].read().read().to_vec();
+        let samples: Vec<Sample> = input[0].read().to_vec();
         let new_source = SourceObject::new(samples, self.channels, self.sample_rate);
 
         match &mut self.sink {

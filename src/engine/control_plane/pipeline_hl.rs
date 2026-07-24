@@ -5,6 +5,7 @@ use crate::engine::interface_layer::interface_hl::Interface;
 use crate::engine::control_plane::pipeline_graph::PipelineGraph;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use log::info;
 use tokio::runtime::Runtime;
 use crate::engine::control_plane::background_proc_manager::BackgroundTaskManager;
 use crate::engine::control_plane::node_state_manager::ExternalStopSource;
@@ -29,7 +30,7 @@ pub struct Pipeline<Scheduler: PipelineScheduler> {
 }
 impl<Scheduler: PipelineScheduler> Pipeline<Scheduler> {
     pub fn new(scheduler: Scheduler, node_graph: Arc<PipelineGraph>, external_stop_source: ExternalStopSource, analytics_sink: Option<Arc<PipelineAnalyticsSink>>) -> Self {
-        let mut background_task_manager = BackgroundTaskManager::new();
+        let background_task_manager = BackgroundTaskManager::new();
         
         Self {
             scheduler,
@@ -41,6 +42,7 @@ impl<Scheduler: PipelineScheduler> Pipeline<Scheduler> {
     }
 
     pub fn start(&mut self) {
+        info!("Starting Pipeline");
         self.scheduler.scheduler_start();
     }
 
@@ -62,5 +64,9 @@ impl<Scheduler: PipelineScheduler> Pipeline<Scheduler> {
             }
             None => None,
         }
+    }
+
+    pub fn get_analytics_arc(&self) -> Option<Arc<PipelineAnalyticsSink>> {
+        self.analytics_sink.clone()
     }
 }

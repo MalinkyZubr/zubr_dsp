@@ -1,71 +1,27 @@
-use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
+use std::mem;
+use crate::engine::data_plane::structural::pipeline_type_traits::{Sharable};
 use std::mem::swap;
 
-#[derive(Copy, Clone, Default)]
-pub struct DataWrapper<T: Sharable + Send + Sync + Copy> {
-    value: T,
-}
 
-impl<T: Sharable + Send + Sync + Copy> DataWrapper<T>
-where
-    T: Copy,
-{
-    pub fn new() -> Self {
-        DataWrapper {
-            value: Default::default(),
-        }
-    }
-
-    pub fn new_with_value(value: T) -> Self {
-        DataWrapper { value }
-    }
-    pub fn read_immut(&self) -> &T {
-        &self.value
-    }
-    pub fn read(&mut self) -> &mut T {
-        &mut self.value
-    }
-
-    pub fn swap(&mut self, other: &mut T) {
-        swap(&mut self.value, other);
-    }
-
-    pub fn swap_st(&mut self, other: &mut Self) {
-        swap(&mut self.value, &mut other.value);
-    }
-
-    pub fn copy_to_many<const N: usize>(&self, outputs: &mut [Self; N]) {
-        for output in outputs.iter_mut() {
-            output.value = self.value // bitwise copies
-        }
-    }
-
-    pub fn copy_to(&self, output: &mut Self) {
-        output.value = self.value
-    }
-
-    pub fn copy_from_st(&mut self, source: &Self) {
-        self.value = source.value
-    }
-
-    pub fn copy_from(&mut self, source: &T) {
-        self.value = *source
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct BufferArray<T: Sharable, const N: usize> {
-    val: [T; N],
+    val: Box<[T; N]>,
 }
 impl<T: Sharable, const N: usize> BufferArray<T, N> {
+    pub fn swap_pointers(&mut self, other: &mut BufferArray<T, N>) {
+        swap(&mut self.val, &mut other.val);
+    }
+    
     pub fn new() -> Self {
         BufferArray {
-            val: [Default::default(); N],
+            val: Box::new(std::array::from_fn(|_| Default::default())),
         }
     }
-
+    pub fn copy_to(&self, output: &mut Self) {
+        output.val.clone_from(&self.val);
+    }
     pub fn new_with_value(value: [T; N]) -> Self {
-        BufferArray { val: value }
+        BufferArray { val: Box::new(value) }
     }
 
     pub fn read_mut(&mut self) -> &mut [T; N] {
@@ -113,71 +69,6 @@ impl<T: Sharable, const N: usize> Default for BufferArray<T, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ---------- DataWrapper tests ----------
-
-    #[test]
-    fn test_new_default() {
-        let wrapper: DataWrapper<i32> = DataWrapper::new();
-        assert_eq!(*wrapper.clone().read(), 0);
-    }
-
-    #[test]
-    fn test_new_with_value() {
-        let mut wrapper = DataWrapper::new_with_value(42);
-        assert_eq!(*wrapper.read(), 42);
-    }
-
-    #[test]
-    fn test_read_mutability() {
-        let mut wrapper = DataWrapper::new_with_value(10);
-        *wrapper.read() = 20;
-        assert_eq!(*wrapper.read(), 20);
-    }
-
-    #[test]
-    fn test_swap_with_external() {
-        let mut wrapper = DataWrapper::new_with_value(5);
-        let mut external = 99;
-
-        wrapper.swap(&mut external);
-
-        assert_eq!(*wrapper.read(), 99);
-        assert_eq!(external, 5);
-    }
-
-    #[test]
-    fn test_swap_st_between_wrappers() {
-        let mut a = DataWrapper::new_with_value(1);
-        let mut b = DataWrapper::new_with_value(2);
-
-        a.swap_st(&mut b);
-
-        assert_eq!(*a.read(), 2);
-        assert_eq!(*b.read(), 1);
-    }
-
-    #[test]
-    fn test_copy_to() {
-        let src = DataWrapper::new_with_value(7);
-        let mut dst = DataWrapper::new();
-
-        src.copy_to(&mut dst);
-
-        assert_eq!(*dst.read(), 7);
-    }
-
-    #[test]
-    fn test_copy_to_many() {
-        let src = DataWrapper::new_with_value(11);
-        let mut outputs = [DataWrapper::new(), DataWrapper::new(), DataWrapper::new()];
-
-        src.copy_to_many(&mut outputs);
-
-        for out in outputs.iter_mut() {
-            assert_eq!(*out.read(), 11);
-        }
-    }
 
     // ---------- BufferArray tests ----------
 

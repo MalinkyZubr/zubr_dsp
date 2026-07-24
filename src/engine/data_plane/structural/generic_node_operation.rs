@@ -1,4 +1,3 @@
-use crate::engine::data_plane::communication_layer::data_management::DataWrapper;
 use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use async_trait::async_trait;
 use std::any::type_name;
@@ -13,15 +12,15 @@ use std::any::type_name;
 pub trait PipelineNodeOp<I: Sharable, O: Sharable, const NI: usize>: Send + Sync + 'static {
     fn run_cpu(
         &mut self,
-        _input: &mut [DataWrapper<I>; NI],
-        _output: &mut DataWrapper<O>,
+        _input: &mut [I; NI],
+        _output: &mut O,
     ) -> Result<(), ()> {
         panic!("CPU run not implemented on {}!", type_name::<Self>())
     }
     async fn run_io(
         &mut self,
-        _input: &mut [DataWrapper<I>; NI],
-        _output: &mut DataWrapper<O>,
+        _input: &mut [I; NI],
+        _output: &mut O,
     ) -> Result<(), ()> {
         panic!("IO run not implemented on {}!", type_name::<Self>())
     }

@@ -1,6 +1,6 @@
-use crate::engine::data_plane::::data_management::*;
-use crate::engine::data_plane::::generic_node_operation::*;
-use crate::engine::data_plane::::pipeline_type_traits::*;
+use crate::engine::data_plane::communication_layer::data_management::*;
+use crate::engine::data_plane::structural::generic_node_operation::*;
+use crate::engine::data_plane::structural::pipeline_type_traits::*;
 use num::Num;
 use std::iter::Sum;
 use std::mem;
@@ -48,16 +48,16 @@ impl<T: Sharable + Num + Copy + Sum, const IRS: usize, const IS: usize>
     }
 }
 
-impl<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
+impl<T: Sharable + Num + Sum + Copy, const IRS: usize, const IS: usize>
     PipelineNodeOp<BufferArray<T, IS>, BufferArray<T, IS>, 1> for DiscreteConvolution<T, IRS, IS>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, IS>>; 1],
-        output: &mut DataWrapper<BufferArray<T, IS>>,
+        input: &mut [BufferArray<T, IS>; 1],
+        output: &mut BufferArray<T, IS>,
     ) -> Result<(), ()> {
-        self.convolve_input(input[0].read());
-        mem::swap(output.read().read_mut(), &mut self.internal_buffer);
+        self.convolve_input(&mut input[0]);
+        mem::swap(output.read_mut(), &mut self.internal_buffer);
 
         Ok(())
     }
@@ -65,7 +65,7 @@ impl<T: Sharable + Num + Sum, const IRS: usize, const IS: usize>
 
 #[cfg(test)]
 mod td_convolution_tests {
-    use crate::engine::data_plane::::data_management::BufferArray;
+    use crate::engine::data_plane::communication_layer::data_management::BufferArray;
 
     #[test]
     fn test_td_convolution_ir_eq_in() {

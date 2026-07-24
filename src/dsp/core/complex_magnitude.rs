@@ -1,6 +1,6 @@
-use crate::engine::data_plane::::data_management::*;
-use crate::engine::data_plane::::generic_node_operation::*;
-use crate::engine::data_plane::::pipeline_type_traits::*;
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray};
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use num::complex::Complex;
 use num::Num;
 use num_traits::{cast, Float, NumCast};
@@ -17,11 +17,11 @@ impl ComplexMagnitude {
 impl <T: Sharable + Num + NumCast + Float, const BufferSize: usize> PipelineNodeOp<BufferArray<Complex<T>, BufferSize>, BufferArray<T, BufferSize>, 1> for ComplexMagnitude {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<Complex<T>, BufferSize>>; 1],
-        output: &mut DataWrapper<BufferArray<T, BufferSize>>,
+        input: &mut [BufferArray<Complex<T>, BufferSize>; 1],
+        output: &mut BufferArray<T, BufferSize>,
     ) -> Result<(), ()> {
         for index in 0..BufferSize {
-            output.read().set(index, input[0].read().get(index).norm())
+            output.set(index, input[0].get(index).norm())
         }
         
         Ok(())

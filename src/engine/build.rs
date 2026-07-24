@@ -26,7 +26,7 @@ pub fn build_pipeline<Scheduler: PipelineScheduler>(
     let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new()));
     build_routine(build_vector.clone(), pipeline_parameters.clone());
     
-    let mut prepared_nodes = build_vector.borrow_mut().submit_nodes();
+    let prepared_nodes = build_vector.borrow_mut().submit_nodes();
     if pipeline_parameters.verify_topology {
         // match verify_pipeline_topology(&mut prepared_nodes) {
         //     Ok(_) => (),
@@ -38,7 +38,7 @@ pub fn build_pipeline<Scheduler: PipelineScheduler>(
     }
     
     let analytics_sink = match pipeline_parameters.pipeline_configuration {
-        (PipelineInterfaceConfiguration::GUI | PipelineInterfaceConfiguration::TermFull) => {
+        PipelineInterfaceConfiguration::GUI | PipelineInterfaceConfiguration::TermFull => {
             Some(Arc::new(PipelineAnalyticsSink::new(pipeline_parameters.analytics_sink_buffer_size)))
         },
         _ => None

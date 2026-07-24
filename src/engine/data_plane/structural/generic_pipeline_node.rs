@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::fmt::Debug;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RunModel {
     IO,
     CPU,
@@ -13,6 +13,13 @@ impl RunModel {
             RunModel::IO => NodeState::ExecIo,
             RunModel::CPU => NodeState::ExecCpu,
             RunModel::Communicator => NodeState::ExecCommunicate,
+        }
+    }
+    pub fn to_string(&self) -> String {
+        match self {
+            RunModel::IO => String::from("IO"),
+            RunModel::CPU => String::from("CPU"),
+            RunModel::Communicator => String::from("Communicator"),
         }
     }
 }

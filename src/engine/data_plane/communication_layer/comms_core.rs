@@ -1,39 +1,39 @@
-use crate::engine::data_plane::communication_layer::data_management::DataWrapper;
 use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use crossbeam_queue::ArrayQueue;
+use log::error;
+use std::mem;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use log::error;
 use tokio::select;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{
     error::SendError as TokioSendError, Receiver as TokioReceiver, Sender as TokioSender,
 };
-use tokio::sync::mpsc::error::SendError;
 use tokio::sync::Notify;
 use tracing::warn;
 
 pub struct Consumer<T: Sharable> {
-    queue: Arc<ArrayQueue<DataWrapper<T>>>,
+    queue: Arc<ArrayQueue<T>>,
 }
 impl<T: Sharable> Consumer<T> {
-    fn new(queue: Arc<ArrayQueue<DataWrapper<T>>>) -> Self {
+    fn new(queue: Arc<ArrayQueue<T>>) -> Self {
         Consumer { queue }
     }
 
-    fn try_pop(&mut self) -> Option<DataWrapper<T>> {
+    fn try_pop(&mut self) -> Option<T> {
         self.queue.pop()
     }
 }
 
 pub struct Producer<T: Sharable> {
-    queue: Arc<ArrayQueue<DataWrapper<T>>>,
+    queue: Arc<ArrayQueue<T>>,
 }
 impl<T: Sharable> Producer<T> {
-    fn new(queue: Arc<ArrayQueue<DataWrapper<T>>>) -> Self {
+    fn new(queue: Arc<ArrayQueue<T>>) -> Self {
         Producer { queue }
     }
 
-    fn try_push(&mut self, data: DataWrapper<T>) -> Option<()> {
+    fn try_push(&mut self, data: T) -> Option<()> {
         self.queue.push(data).ok()
     }
 }
@@ -49,13 +49,13 @@ pub struct WrappedSender<T: Sharable> {
     dest_id: usize,
     is_stopped: bool,
     //backpressure_notify: Arc<Notify>,
-    sender: TokioSender<DataWrapper<T>>,
+    sender: TokioSender<T>,
     satiation_capacity: Arc<AtomicUsize>,
     buffer_consumer: Consumer<T>,
 }
 impl<T: Sharable> WrappedSender<T> {
     pub fn new(
-        sender: TokioSender<DataWrapper<T>>,
+        sender: TokioSender<T>,
         dest_id: usize,
         //backpressure_notify: Arc<Notify>,
         satiation_capacity: Arc<AtomicUsize>,
@@ -70,7 +70,7 @@ impl<T: Sharable> WrappedSender<T> {
             buffer_consumer,
         }
     }
-    async fn send(&mut self, data: DataWrapper<T>) -> Result<(), TokioSendError<DataWrapper<T>>> {
+    async fn send(&mut self, data: T) -> Result<(), TokioSendError<T>> {
         // select! {
         //     output = self.sender.send(data) => { output },
         //     _ = {println!("BP Notify {}", self.dest_id); self.backpressure_notify.notified()} => {
@@ -81,30 +81,35 @@ impl<T: Sharable> WrappedSender<T> {
         self.sender.send(data).await // not using backpressure mechanisms yet
     }
 
-    pub fn consume_buffer(&mut self) -> DataWrapper<T> {
+    pub fn consume_buffer(&mut self) -> T
+    where
+        T: Default,
+    {
         self.buffer_consumer.try_pop().unwrap_or_else(|| {
             warn!("Plumbing issue! Buffer is empty!");
-            DataWrapper::new()
+            T::default()
         })
     }
 
-    pub async fn send_copy(
-        &mut self,
-        input_data: &mut DataWrapper<T>,
-    ) -> Result<(), TokioSendError<DataWrapper<T>>> {
+    pub async fn send_clone(&mut self, input_data: &mut T) -> Result<(), TokioSendError<T>> {
         let mut output_buffer = self.consume_buffer();
-        input_data.copy_to(&mut output_buffer);
+        output_buffer = input_data.clone();
+
+        self.send(output_buffer).await
+    }
+    pub async fn send_copy(&mut self, input_data: &mut T) -> Result<(), TokioSendError<T>>
+    where
+        T: Copy,
+    {
+        let mut output_buffer = self.consume_buffer();
+        output_buffer = *input_data;
 
         self.send(output_buffer).await
     }
 
-    pub async fn send_swap(
-        &mut self,
-        input_data: &mut DataWrapper<T>,
-    ) -> Result<(), TokioSendError<DataWrapper<T>>> {
+    pub async fn send_swap(&mut self, input_data: &mut T) -> Result<(), TokioSendError<T>> {
         let mut output_buffer = self.consume_buffer();
-        input_data.swap_st(&mut output_buffer);
-        
+        mem::swap(&mut output_buffer, input_data);
         self.send(output_buffer).await
     }
 
@@ -133,13 +138,13 @@ impl<T: Sharable> WrappedSender<T> {
 pub async fn iterative_send<T: Sharable, const N: usize>(
     senders: &mut [WrappedSender<T>; N],
     satiated_edges: &mut [usize; N],
-    data: &mut DataWrapper<T>,
-) -> Result<usize, TokioSendError<DataWrapper<T>>> {
+    data: &mut T,
+) -> Result<usize, TokioSendError<T>> {
     let mut num_satiated = 0;
     for sender_idx in 0..senders.len() - 1 {
         let sender = &mut senders[sender_idx];
 
-        match sender.send_copy(data).await {
+        match sender.send_clone(data).await {
             Ok(()) => {
                 if sender.channel_satiated() {
                     satiated_edges[num_satiated] = *sender.get_dest_id();
@@ -151,8 +156,9 @@ pub async fn iterative_send<T: Sharable, const N: usize>(
     }
     let last_index = senders.len() - 1;
     let last_sender = &mut senders[last_index];
-    
-    match last_sender.send_swap(data).await { // for step 10 get here and await
+
+    match last_sender.send_swap(data).await {
+        // for step 10 get here and await
         Ok(()) => {
             if last_sender.channel_satiated() {
                 satiated_edges[last_index] = *last_sender.get_dest_id();
@@ -167,14 +173,14 @@ pub async fn iterative_send<T: Sharable, const N: usize>(
 pub struct WrappedReceiver<T: Sharable> {
     source_id: usize,
     is_stopped: bool,
-    receiver: TokioReceiver<DataWrapper<T>>,
+    receiver: TokioReceiver<T>,
     //backpressure_notify: Arc<Notify>,
     satiation_capacity: Arc<AtomicUsize>,
     buffer_producer: Producer<T>,
 }
 impl<T: Sharable> WrappedReceiver<T> {
     pub fn new(
-        receiver: TokioReceiver<DataWrapper<T>>,
+        receiver: TokioReceiver<T>,
         source_id: usize,
         //backpressure_notify: Arc<Notify>,
         satiation_capacity: Arc<AtomicUsize>,
@@ -190,12 +196,12 @@ impl<T: Sharable> WrappedReceiver<T> {
         }
     }
 
-    pub fn recv(&mut self) -> Option<DataWrapper<T>> {
+    pub fn recv(&mut self) -> Option<T> {
         let res = self.receiver.blocking_recv();
         res
     }
 
-    pub fn refill_buffer(&mut self, data: DataWrapper<T>) {
+    pub fn refill_buffer(&mut self, data: T) {
         match self.buffer_producer.try_push(data) {
             Some(_) => (),
             None => {
@@ -204,7 +210,7 @@ impl<T: Sharable> WrappedReceiver<T> {
         }
     }
 
-    pub async fn recv_async(&mut self) -> Option<DataWrapper<T>> {
+    pub async fn recv_async(&mut self) -> Option<T> {
         self.receiver.recv().await
     }
 
@@ -233,7 +239,7 @@ impl<T: Sharable> WrappedReceiver<T> {
         self.satiation_capacity
             .store(capacity, std::sync::atomic::Ordering::Release);
     }
-    
+
     pub fn get_source_id(&self) -> &usize {
         &self.source_id
     }
@@ -243,12 +249,15 @@ pub fn channel_wrapped<T: Sharable>(
     buffer_size: usize,
     source_id: usize,
     dest_id: usize,
-) -> (WrappedSender<T>, WrappedReceiver<T>) {
+) -> (WrappedSender<T>, WrappedReceiver<T>)
+where
+    T: Default,
+{
     if buffer_size == 0 {
         panic!("Buffer size must be greater than 0");
     }
     let (sender, receiver) = tokio::sync::mpsc::channel(buffer_size);
-    let backpressure_notify = Arc::new(Notify::new());
+    let _backpressure_notify = Arc::new(Notify::new());
     let satiation_capacity: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(1));
 
     // in order to guarantee that the buffer consumer in the channel sender doesnt have a non-async block
@@ -258,7 +267,7 @@ pub fn channel_wrapped<T: Sharable>(
         make_crossbeam_queue_handles(buffer_size + 2);
 
     for _ in 0..buffer_size + 2 {
-        let _ = channel_wrapped_producer.try_push(DataWrapper::new());
+        let _ = channel_wrapped_producer.try_push(T::default());
     }
 
     (
@@ -303,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_wrapped_sender_new() {
-        let (tx, _) = mpsc::channel::<DataWrapper<i32>>(10);
+        let (tx, _) = mpsc::channel::<i32>(10);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
         let (_channel_wrapped_producer, channel_wrapped_consumer) =
@@ -317,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_wrapped_receiver_new() {
-        let (_, rx) = mpsc::channel::<DataWrapper<i32>>(10);
+        let (_, rx) = mpsc::channel::<i32>(10);
         let notify = Arc::new(Notify::new());
         let capacity = Arc::new(AtomicUsize::new(5));
 
@@ -336,13 +345,13 @@ mod tests {
 
         let test_data = 42;
         let result = sender
-            .send(DataWrapper::new_with_value(test_data.clone()))
+            .send(test_data.clone())
             .await;
 
         assert!(result.is_ok());
 
         let mut received = receiver.recv_async().await.unwrap();
-        assert_eq!(*received.read(), test_data);
+        assert_eq!(received, test_data);
     }
 
     #[test]
@@ -354,7 +363,7 @@ mod tests {
         // Send data using the runtime
         rt.spawn(async move {
             tokio::time::sleep(Duration::from_millis(10)).await;
-            sender.send(DataWrapper::new_with_value(123)).await.unwrap();
+            sender.send(123).await.unwrap();
         });
 
         // Use the runtime to handle the blocking receive
@@ -369,7 +378,7 @@ mod tests {
         });
 
         assert!(result.is_ok());
-        assert_eq!(*result.unwrap().unwrap().read(), 123);
+        assert_eq!(result.unwrap().unwrap(), 123);
     }
 
     #[test]
@@ -399,15 +408,15 @@ mod tests {
     // #[test]
     // fn test_wrapped_receiver_set_state() {
     //     let (_, mut receiver) = channel_wrapped::<i32>(10, 0, 1);
-    // 
+    //
     //     assert!(receiver.is_stopped());
-    // 
+    //
     //     receiver.set_state(false);
     //     assert!(!receiver.is_stopped());
-    // 
+    //
     //     receiver.set_state(true);
     //     assert!(receiver.is_stopped());
-    // 
+    //
     //     // Setting same state should not change anything
     //     receiver.set_state(true);
     //     assert!(receiver.is_stopped());
@@ -424,7 +433,7 @@ mod tests {
         let result = iterative_send(
             &mut senders,
             &mut satiated_edges,
-            &mut DataWrapper::new_with_value(test_data.clone()),
+            &mut test_data.clone(),
         )
         .await;
 
@@ -433,8 +442,8 @@ mod tests {
         let mut received1 = receiver1.recv_async().await.unwrap();
         let mut received2 = receiver2.recv_async().await.unwrap();
 
-        assert_eq!(*received1.read(), test_data);
-        assert_eq!(*received2.read(), test_data);
+        assert_eq!(received1, test_data);
+        assert_eq!(received2, test_data);
     }
 
     #[test]

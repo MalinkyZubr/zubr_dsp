@@ -1,15 +1,15 @@
 use crate::engine::data_plane::communication_layer::comms_core::{WrappedReceiver, WrappedSender};
 use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::construction::node_build_vector::PreparedNode;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
 use crate::engine::data_plane::structural::node_types::deconstruct::PipelineDeconstructorNode;
 use crate::engine::data_plane::structural::node_types::interleaving::PipelineDeInterleavingNode;
-use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
-use crate::engine::data_plane::structural::node_types::standard::PipelineStandardNode;
-use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 use crate::engine::data_plane::structural::node_types::reconstruct::PipelineReconstructorNode;
+use crate::engine::data_plane::structural::node_types::standard::PipelineStandardNode;
 use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use log::{debug, info};
 use std::collections::HashMap;
-use crate::engine::data_plane::construction::node_build_vector::PreparedNode;
 
 
 pub struct UnfinishedNode<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
@@ -133,7 +133,7 @@ where
         PreparedNode::new(Box::new(interleaved_separator), self.id, self.name.clone())
     }
 
-    pub fn build_interleave(mut self) -> PreparedNode {
+    pub fn build_interleave(self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -167,7 +167,7 @@ impl<T: Sharable, const NO: usize, const ND: usize> UnfinishedNode<BufferArray<T
         PreparedNode::new(Box::new(deconstructor_separator), self.id, self.name.clone())
     }
 
-    pub fn build_deconstruct(mut self) -> PreparedNode {
+    pub fn build_deconstruct(self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }
@@ -199,7 +199,7 @@ impl<T: Sharable, const NO: usize, const NR: usize> UnfinishedNode<T, BufferArra
         PreparedNode::new(Box::new(reconstructor_separator), self.id, self.name.clone())
     }
 
-    pub fn build_reconstruct(mut self) -> PreparedNode {
+    pub fn build_reconstruct(self) -> PreparedNode {
         if self.inputs.len() != 1 {
             panic!("Incorrect number of inputs for BuildingNode ID {}", self.id);
         }

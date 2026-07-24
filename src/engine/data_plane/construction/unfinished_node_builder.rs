@@ -196,7 +196,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
     }
 
     pub fn add_pipeline_sink(
-        mut self,
+        self,
         name: String,
         step: impl PipelineSink<O, 1> + 'static,
         running_model: RunModel,
@@ -204,7 +204,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
         // End a linear engine branch, allowing the step itself to handle output to other parts of the program
         let new_id = self.build_vector.borrow_mut().get_new_id();
 
-        let mut new_node: Rc<RefCell<Option<UnfinishedNode<O, (), 1, 0>>>> =
+        let new_node: Rc<RefCell<Option<UnfinishedNode<O, (), 1, 0>>>> =
             Rc::new(RefCell::new(Some(UnfinishedNode::new(
                 name,
                 new_id,
@@ -234,7 +234,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
     ) -> UnfinishedNodeBuilder<T, (), 1, 0> {
         let new_id = build_vector.borrow_mut().get_new_id();
 
-        let mut new_node = Rc::new(RefCell::new(Some(UnfinishedNode::new(name, new_id, pipeline_parameters.max_in_flight))));
+        let new_node = Rc::new(RefCell::new(Some(UnfinishedNode::new(name, new_id, pipeline_parameters.max_in_flight))));
         let new_node_clone = new_node.clone();
         node_func_wrap_mut(new_node_clone, |new_node_in| {
             new_node_in.attach_step(Box::new(step));
@@ -300,7 +300,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
     {
         // where statement requires that NIN is greater than 1
         let new_id = build_vector.borrow_mut().get_new_id();
-        let mut new_node = Rc::new(RefCell::new(Some(UnfinishedNode::new(name, new_id, pipeline_parameters.max_in_flight))));
+        let new_node = Rc::new(RefCell::new(Some(UnfinishedNode::new(name, new_id, pipeline_parameters.max_in_flight))));
 
         let new_node_clone = new_node.clone();
         node_func_wrap_mut(new_node_clone, |new_node_in| {
@@ -351,7 +351,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
     }
 
     pub fn feed_into<F: Sharable, const NIF: usize, const NOF: usize>(
-        mut self,
+        self,
         standalone_builder: &mut UnfinishedNodeBuilder<O, F, NIF, NOF>,
     ) -> Self {
         let receiver = self.channel_predecessor_attach(standalone_builder.get_node_id());
@@ -363,7 +363,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize> UnfinishedNodeB
         self
     }
 
-    pub fn add_initial_state(mut self, initial_state: O) -> Self {
+    pub fn add_initial_state(self, initial_state: O) -> Self {
         // must perform loop detection at construction time to verify that all loops produce a base value to avoid starting lockups
         node_func_wrap_mut(self.node_predecessor.clone(), |node| {
             node.add_initial_state(initial_state);
@@ -412,7 +412,7 @@ impl<I: Sharable, O: Sharable, const NI: usize, const NO: usize, const IBS: usiz
     {
         let new_id = self.build_vector.borrow_mut().get_new_id();
         
-        let mut new_node = Rc::new(RefCell::new(Some(UnfinishedNode::new(name, new_id, self.pipeline_parameters.max_in_flight))));
+        let new_node = Rc::new(RefCell::new(Some(UnfinishedNode::new(name, new_id, self.pipeline_parameters.max_in_flight))));
         let receiver = self.channel_predecessor_attach(new_id);
 
         let new_node_clone = new_node.clone();

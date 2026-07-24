@@ -1,5 +1,6 @@
 use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, NodeState};
 use std::collections::HashMap;
+use log::{debug, error};
 use tokio::sync::broadcast::{
     channel as broadcast_channel, Receiver as BroadcastReceiver, Sender as BroadcastSender,
 };
@@ -12,6 +13,7 @@ pub struct NodeStateAuthPacket {
     node_id: usize,
     stop: bool,
 }
+
 
 pub struct InternodeStopAuthorityFactory {
     sender: BroadcastSender<NodeStateAuthPacket>,

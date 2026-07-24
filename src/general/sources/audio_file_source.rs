@@ -1,7 +1,4 @@
 use std::collections::VecDeque;
-use crate::engine::data_plane::::data_management::*;
-use crate::engine::data_plane::::generic_node_operation::PipelineNodeOp;
-use crate::engine::data_plane::::pipeline_type_traits::*;
 use std::fs::File;
 use log::error;
 use symphonia::core::audio::SampleBuffer;
@@ -11,6 +8,8 @@ use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 
 enum AudioReadResult {
     Ok(Vec<f32>),
@@ -99,8 +98,8 @@ impl<const BUFFER_SIZE: usize> PipelineNodeOp<(), BufferArray<f32, BUFFER_SIZE>,
 {
     fn run_cpu(
         &mut self,
-        _input: &mut [DataWrapper<()>; 0],
-        output: &mut DataWrapper<BufferArray<f32, BUFFER_SIZE>>,
+        _input: &mut [(); 0],
+        output: &mut BufferArray<f32, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         let mut error_count = 0;
         let mut start_index = 0;
@@ -108,7 +107,7 @@ impl<const BUFFER_SIZE: usize> PipelineNodeOp<(), BufferArray<f32, BUFFER_SIZE>,
         let overflow_size = self.overflow_buffer.len();
 
         while start_index < BUFFER_SIZE && start_index < overflow_size {
-            output.read().set(start_index, self.overflow_buffer.pop_front().unwrap());
+            output.set(start_index, self.overflow_buffer.pop_front().unwrap());
             start_index += 1;
         }
         
@@ -125,14 +124,14 @@ impl<const BUFFER_SIZE: usize> PipelineNodeOp<(), BufferArray<f32, BUFFER_SIZE>,
                         panic!("Packet data is empty");
                     }
                     if BUFFER_SIZE - start_index < packet_data.len() {
-                        let slice = &mut output.read().read_mut()[start_index..];
+                        let slice = &mut output.read_mut()[start_index..];
                         slice.copy_from_slice(&packet_data.as_slice()[..BUFFER_SIZE - start_index]);
 
                         self.overflow_buffer.extend(&packet_data.as_slice()[BUFFER_SIZE - start_index..]);
                         start_index = BUFFER_SIZE;
                     }
                     else {
-                        let slice = &mut output.read().read_mut()[start_index..packet_data.len() + start_index];
+                        let slice = &mut output.read_mut()[start_index..packet_data.len() + start_index];
                         slice.copy_from_slice(&packet_data.as_slice()[..BUFFER_SIZE - start_index]);
                         start_index += packet_data.len();
                     }
