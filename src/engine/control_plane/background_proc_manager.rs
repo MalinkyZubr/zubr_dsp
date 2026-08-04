@@ -3,6 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::{select, spawn};
+use tokio::runtime::Runtime;
 use tokio::sync::watch::{channel, Receiver, Sender};
 
 
@@ -34,19 +35,21 @@ impl BackgroundTask {
 pub struct BackgroundTaskManager {
     registered_tasks: HashMap<String, tokio::task::JoinHandle<()>>,
     task_kill_switches: HashMap<String, Sender<()>>,
+    runtime: Arc<Runtime>,
 }
 impl BackgroundTaskManager {
-    pub fn new() -> BackgroundTaskManager {
+    pub fn new(runtime: Arc<Runtime>) -> BackgroundTaskManager {
         BackgroundTaskManager {
             registered_tasks: HashMap::new(),
             task_kill_switches: HashMap::new(),
+            runtime
         }
     }
     
     pub fn add_task(&mut self, task_name: String, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
         let (sender, receiver) = channel(());
         let task_obj = BackgroundTask::new(receiver, task);
-        self.registered_tasks.insert(task_name.clone(), spawn(task_obj.run()));
+        self.registered_tasks.insert(task_name.clone(), self.runtime.spawn(task_obj.run()));
         self.task_kill_switches.insert(task_name, sender);
     }
     

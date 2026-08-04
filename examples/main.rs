@@ -9,6 +9,7 @@ use basic::audio_test::audio_test;
 use zubr_dsp::initiate_pipeline;
 use crate::basic::fft_audio::fft_audio_test;
 use crate::basic::io_bound_breaker_reassemble::io_bound_breaker_reassemble_test;
+use crate::gui::audio_gui;
 // use crate::basic::io_bound_breaker_reassemble::io_bound_breaker_reassemble_test;
 
 fn main() {
@@ -21,6 +22,7 @@ fn main() {
             ("io_bound_breaker_reassemble_test", io_bound_breaker_reassemble_test as fn() -> Result<(), String>),
             ("fft_audio", fft_audio_test as fn() -> Result<(), String>),
             ("basic_gui", gui::basic::basic_gui as fn() -> Result<(), String>),
+            ("audio_gui", audio_gui::audio_gui as fn() -> Result<(), String>),
         ]
     );
 

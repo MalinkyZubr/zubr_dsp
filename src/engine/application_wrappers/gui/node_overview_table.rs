@@ -1,5 +1,5 @@
 use crate::engine::control_plane::pipeline_analytics::NodeAnalytics;
-use crate::gui::node_overview_table::table_advanced::Column;
+use crate::engine::application_wrappers::gui::node_overview_table::table_advanced::Column;
 use iced::widget::{container, responsive, row as wrow};
 use iced::widget::{scrollable, text};
 use iced::{Fill, Shrink, Size, Task, Length};
@@ -11,8 +11,8 @@ use std::time;
 use std::time::UNIX_EPOCH;
 use iced::widget::text::Wrapping;
 use crate::engine::control_plane::pipeline_hl::Pipeline;
-use crate::gui::log_monitor::LogMonitor;
-use crate::gui::style::container_style;
+use crate::engine::application_wrappers::gui::log_monitor::LogMonitor;
+use crate::engine::application_wrappers::gui::style::container_style;
 
 #[derive(Clone)]
 #[derive(Debug)]
@@ -22,6 +22,7 @@ pub enum PipelineTableMessage {
     RowPressed(usize),
     ColumnDragged(usize, f32),
     ColumnReleased,
+    StatusUpdate(Vec<NodeAnalytics>)
 }
 pub enum StopRequestEnum {
     Requested,
@@ -76,9 +77,8 @@ impl<'a> table_advanced::Column<'a, PipelineTableMessage, Theme, iced::Renderer>
             1 => row.id.to_string(),
             2 => row.run_model.to_string(),
             3 => row.current_state.to_string(),
-            4 => row.num_executions.to_string(),
-            5 => row.last_execution_time_ns.to_string(),
-            6 => (time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - row.last_execution_instant_sec).to_string(),
+            4 => row.standard_deviation_execution_time.to_string(),
+            5 => row.average_execution_time.to_string(),
             _ => "".to_string(),
         };
         text(content).into()
@@ -113,9 +113,8 @@ impl PipelineTable {
                 PipelineTableColumn { title: "ID", width: 100.0, sort: Some(true), resize_offset: None },
                 PipelineTableColumn { title: "Run Model", width: 100.0, sort: Some(true), resize_offset: None },
                 PipelineTableColumn { title: "Current State", width: 100.0, sort: Some(true), resize_offset: None },
-                PipelineTableColumn { title: "Num Executions", width: 100.0, sort: Some(true), resize_offset: None },
-                PipelineTableColumn { title: "Exec Time (ns)", width: 100.0, sort: Some(true), resize_offset: None },
-                PipelineTableColumn { title: "Time Since Exec (sec)", width: 100.0, sort: Some(true), resize_offset: None },
+                PipelineTableColumn { title: "Exec Stdev Time (ns)", width: 100.0, sort: Some(true), resize_offset: None },
+                PipelineTableColumn { title: "Exec Average Time (ns)", width: 100.0, sort: Some(true), resize_offset: None },
             ],
             rows,
             header_id: widget::Id::unique(),
@@ -196,14 +195,33 @@ impl PipelineTable {
                         1 => a.id.cmp(&b.id),
                         2 => a.run_model.cmp(&b.run_model),
                         3 => a.current_state.cmp(&b.current_state),
-                        4 => a.num_executions.cmp(&b.num_executions),
-                        5 => a.last_execution_time_ns.cmp(&b.last_execution_time_ns),
-                        6 => a.last_execution_instant_sec.cmp(&b.last_execution_instant_sec),
+                        4 => a.standard_deviation_execution_time.cmp(&b.standard_deviation_execution_time),
+                        5 => a.average_execution_time.cmp(&b.average_execution_time),
                         _ => std::cmp::Ordering::Equal,
                     };
                     if ascending { ord } else { ord.reverse() }
                 });
                 self.selected_row = None;
+            }
+            PipelineTableMessage::StatusUpdate(update) => {
+                for new_status in update {
+                    let new_id = &new_status.id;
+                    let mut idx = 0;
+                    let mut completed = false;
+
+                    while idx < self.rows.len() && !completed {
+                        if self.rows[idx].id == *new_id {
+                            completed = true;
+                        } else {
+                            idx += 1;
+                        }
+                    }
+                    if !completed {
+                        self.rows.push(new_status);
+                    } else {
+                        self.rows[idx] = new_status;
+                    }
+                }
             }
         }
         Task::none()

@@ -12,7 +12,7 @@ use tokio::sync::watch::Receiver as WatchReceiver;
 
 pub fn wrap_prepared_nodes(
     mut prepared_nodes: Vec<PreparedNode>,
-    analytics_sink: &Option<Arc<PipelineAnalyticsSink>>,
+    analytics_sink: &Option<PipelineAnalyticsSink>,
     stop_broadcast_buffer_size: usize,
 ) -> (Vec<NodeWrapper>, ExternalStopSource) {
     let mut external_stop_source = ExternalStopSource::new();

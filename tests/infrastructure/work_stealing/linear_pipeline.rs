@@ -10,12 +10,11 @@ mod tests {
     use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
     use zubr_dsp::engine::data_plane::communication_layer::data_management::BufferArray;
     use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::UnfinishedNodeBuilder;
-    use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{
-        PipelineInterfaceConfiguration, PipelineParameters,
-    };
+    use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::PipelineInterfaceConfiguration;
     use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel;
 
     use tokio::sync::mpsc::{channel, Receiver};
+    use zubr_dsp::engine::zubr_dsp_config::PipelineParameters;
     use zubr_dsp::initiate_pipeline;
 
     fn generate_test_pipeline_cpu(
@@ -46,15 +45,7 @@ mod tests {
                     RunModel::CPU,
                 );
             }),
-            PipelineParameters::new(
-                64,
-                4,
-                None,
-                false,
-                PipelineInterfaceConfiguration::Headless,
-                16,
-                16,
-            ),
+            PipelineParameters::standard_no_analytics(),
             async_runtime,
         );
 
@@ -89,15 +80,7 @@ mod tests {
                     RunModel::IO,
                 );
             }),
-            PipelineParameters::new(
-                64,
-                4,
-                None,
-                false,
-                PipelineInterfaceConfiguration::Headless,
-                16,
-                16,
-            ),
+            PipelineParameters::standard_no_analytics(),
             async_runtime,
         );
 

@@ -3,7 +3,7 @@ use iced::{Element, Fill, Task};
 use log::{info, Level};
 use std::borrow::Borrow;
 use iced::alignment::Vertical;
-use crate::gui::style::container_style;
+use crate::engine::application_wrappers::gui::style::container_style;
 use super::log_monitor::LogMonitor;
 use super::node_overview_table::PipelineTable;
 
@@ -14,7 +14,7 @@ pub struct CncWindow {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum CncMessage {
+pub enum CncMessage {
     Kill,
     Pause,
     Start

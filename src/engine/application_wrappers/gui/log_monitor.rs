@@ -1,13 +1,14 @@
 use iced::widget::{button, checkbox, column, container, pick_list, row, scrollable, text};
 use iced::{Element, Fill, Task};
-use log::Level;
+use log::{info, Level};
 use std::borrow::Borrow;
 use iced::widget::text::Wrapping::WordOrGlyph;
-use crate::gui::style::{container_style, log_window_style};
+use crate::engine::application_wrappers::gui::style::{container_style, log_window_style};
 
 #[derive(Debug, Default)]
 pub struct LogMonitor<const MaxLogSize: usize> {
     log_string: String,
+    log_level: LevelWrapper,
     logging: bool,
 }
 
@@ -52,6 +53,12 @@ impl ToString for LevelWrapper {
     }
 }
 
+impl Default for LevelWrapper {
+    fn default() -> Self {
+        LevelWrapper::Error
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum LogMessage {
     ToggleLogging,
@@ -76,14 +83,17 @@ impl<const MaxLogSize: usize> LogMonitor<MaxLogSize> {
         match message {
             LogMessage::ToggleLogging => {
                 self.logging = !self.logging;
+                info!("Logging: {}", self.logging);
                 Task::none()
             }
             LogMessage::ClearLogWindow => {
                 self.log_string.clear();
+                info!("Clear log window");
                 Task::none()
             }
             LogMessage::SetLogLevel(level) => {
                 self.log_string = String::from(level.to_string());
+                info!("Log level: {:?}", level);
                 Task::none()
             }
         }
@@ -105,7 +115,7 @@ impl<const MaxLogSize: usize> LogMonitor<MaxLogSize> {
             LevelWrapper::Error,
         ];
         let log_level_selector =
-            pick_list(levels, Some(LevelWrapper::Debug), LogMessage::SetLogLevel)
+            pick_list(levels, Some(self.log_level), LogMessage::SetLogLevel)
                 .placeholder("Log level");
 
         let controls = row![

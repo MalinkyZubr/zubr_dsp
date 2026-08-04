@@ -83,7 +83,7 @@ pub fn am_end_to_end_test() -> Result<(), String> {
                 .attach_standard::<_, 1, 1>("demodulator".to_string(), AMDemodulator::new(carrier_amplitude, modulation_index), CPU)
                 .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
-        PipelineParameters::new(16, 5, None, false, PipelineInterfaceConfiguration::Headless, 5, 64),
+        PipelineParameters::standard_no_analytics(),
         rt,
     ).unwrap();
     

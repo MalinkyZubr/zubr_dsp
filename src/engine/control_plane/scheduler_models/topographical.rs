@@ -1,7 +1,7 @@
 use crate::engine::control_plane::node_wrapper::{CommTask, NodeWrapper, RunType};
 use crate::engine::control_plane::pipeline_graph::PipelineGraph;
 use crate::engine::control_plane::pipeline_hl::PipelineScheduler;
-use crate::engine::data_plane::construction::unfinished_node_builder::PipelineParameters;
+use crate::engine::zubr_dsp_config::PipelineParameters;
 use crate::engine::data_plane::structural::generic_pipeline_node::{GenericNode, RunModel};
 use log::{debug, error, info, trace, warn};
 use rayon::{ThreadPool as RayonPool, ThreadPoolBuilder as RayonBuilder};
@@ -212,7 +212,6 @@ pub struct ThreadPoolTopographicalHandle {
     run_flag: Arc<AtomicBool>,
     graph: Arc<PipelineGraph>,
     master_pool: Arc<ThreadPoolTopographical>,
-    analytic_task: Option<tokio::task::JoinHandle<()>>,
     async_runtime: Arc<Runtime>,
 }
 impl PipelineScheduler for ThreadPoolTopographicalHandle {
@@ -229,27 +228,10 @@ impl PipelineScheduler for ThreadPoolTopographicalHandle {
         
         let run_flag = thread_pool.get_run_flag();
         
-        let analytic_task;
-        match pipeline_parameters.debug_analytic_interval {
-            Some(interval) => {
-                let graph_clone = graph.clone();
-                let run_flag_clone = run_flag.clone();
-                analytic_task = Some(async_runtime.handle().spawn(async move {
-                    loop {
-                        if run_flag_clone.load(std::sync::atomic::Ordering::Acquire) {
-                            
-                        }
-                        tokio::time::sleep(tokio::time::Duration::from_secs(interval)).await;
-                    }
-                }));
-            }
-            None => { analytic_task = None; }
-        }
         Self {
             run_flag,
             graph,
             master_pool: thread_pool,
-            analytic_task,
             async_runtime
         }
     }

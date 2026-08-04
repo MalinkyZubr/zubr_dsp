@@ -1,27 +1,20 @@
-use std::cell::RefCell;
 use std::io;
-use std::rc::Rc;
 use std::sync::Arc;
-use log::Level;
-use num::Complex;
 use rodio::{OutputStreamBuilder, Sink};
 use tokio::runtime::Builder;
-use zubr_dsp::dsp::core::complex_magnitude::ComplexMagnitude;
 use zubr_dsp::dsp::core::converters::{ComplexToReal, RealToComplex};
-use zubr_dsp::dsp::filtering::fir::fir::FIRFilter;
-use zubr_dsp::dsp::modulation::am::am_demod::AMDemodulator;
-use zubr_dsp::dsp::modulation::am::am_mod::AMModulator;
 use zubr_dsp::dsp::system_response::fft::{FFT, IFFT};
 use zubr_dsp::dsp::system_response::overlap_save_chunks::generate_overlap_save_steps;
-use zubr_dsp::dsp::system_response::special_transfer_functions::tf_analytic;
 use zubr_dsp::engine::build::build_pipeline;
 use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
 use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
-use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, PipelineParameters, UnfinishedNodeBuilder};
+use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, UnfinishedNodeBuilder};
 use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel::{CPU, IO};
+use zubr_dsp::engine::zubr_dsp_config::PipelineParameters;
 use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
+
 
 pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
     println!("Beginning breaker test\nEnter absolute path to mp3:");
@@ -67,7 +60,7 @@ pub fn io_bound_breaker_reassemble_test() -> Result<(), String> {
                 .attach_standard::<_, 1, 1>("dechunker".to_string(), combiner, CPU)
                 .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
-        PipelineParameters::new(16, 5, None, false, PipelineInterfaceConfiguration::Headless, 5, 64),
+        PipelineParameters::standard_no_analytics(),
         rt,
     ).unwrap();
 

@@ -19,8 +19,9 @@ use zubr_dsp::engine::control_plane::logging::{init_logger, init_stdout_logger, 
 use zubr_dsp::engine::control_plane::pipeline_graph::PipelineGraph;
 use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
 use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
-use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, PipelineParameters, UnfinishedNodeBuilder};
+use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, UnfinishedNodeBuilder};
 use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel::{CPU, IO};
+use zubr_dsp::engine::zubr_dsp_config::PipelineParameters;
 use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
@@ -60,7 +61,7 @@ pub fn audio_test() -> Result<(), String> {
                 .attach_standard::<_, 1, 1>("throttle".to_string(), Throttle::new(88.2e3), IO)
                 .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
-        PipelineParameters::new(16, 5, None, false, PipelineInterfaceConfiguration::Headless, 5, 64),
+        PipelineParameters::standard_no_analytics(),
         rt,
     ).unwrap();
 

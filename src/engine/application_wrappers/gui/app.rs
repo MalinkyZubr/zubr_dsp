@@ -1,22 +1,39 @@
 use super::cnc_window::{CncMessage, CncWindow};
 use super::log_monitor::{LogMessage, LogMonitor};
 use super::node_overview_table::{PipelineTable, PipelineTableMessage};
-use crate::engine::control_plane::pipeline_analytics::NodeAnalytics;
+use crate::engine::application_wrappers::gui::style::container_style;
+use crate::engine::control_plane::node_wrapper::NodeWrapper;
+use crate::engine::control_plane::pipeline_analytics::{NodeAnalytics, PipelineAnalyticsSink};
 use crate::engine::data_plane::structural::generic_pipeline_node::{NodeState, RunModel};
-use crate::gui::style::container_style;
 use iced::alignment::Horizontal;
+use iced::futures::{
+    channel::mpsc::{Receiver as IcedReceiver, Sender as IcedSender},
+    Stream,
+};
+use iced::stream;
 use iced::widget::rule::FillMode::Percent;
 use iced::widget::{
     button, center_x, checkbox, column, container, pick_list, responsive, row, scrollable, text,
 };
 use iced::Length::Fixed;
-use iced::{Center, Element, Fill, FillPortion, Shrink, Size, Task};
+use iced::{event, Center, Element, Fill, FillPortion, Shrink, Size, Subscription, Task};
 use log::{info, Level};
+use scc::Queue;
+use std::future::Future;
+use std::ops::Deref;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub struct App<const MAX_LOG_MESSAGES: usize> {
+    // UI components
     cnc_window: CncWindow,
     log_monitor: LogMonitor<MAX_LOG_MESSAGES>,
     node_overview_table: PipelineTable,
+
+    // data components
+    analytics_proxy_queue: Option<Arc<Queue<NodeAnalytics>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,15 +41,66 @@ pub enum AppMessage {
     CncWindow(CncMessage),
     LogMonitor(LogMessage),
     PipelineTable(PipelineTableMessage),
+    InternalControl(Sender<Option<Arc<Queue<NodeAnalytics>>>>),
 }
 
 impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
-    pub fn new() -> Self {
+    pub fn new(analytics_sink: Option<Arc<Queue<NodeAnalytics>>>) -> Self {
         Self {
             cnc_window: CncWindow::default(),
             log_monitor: LogMonitor::default(),
             node_overview_table: PipelineTable::new(vec![]),
+            analytics_proxy_queue: analytics_sink,
         }
+    }
+
+    // async fn get_analytics(pipeline_analytics_sink: PipelineAnalyticsSink) -> AppMessage {
+    //     AppMessage::PipelineTable(PipelineTableMessage::StatusUpdate(
+    //         pipeline_analytics_sink
+    //             .get_analytics_direct().await
+    //             .into_values()
+    //             .collect::<Vec<NodeAnalytics>>(),
+    //     ))
+    // }
+
+    fn get_analytics_worker() -> impl Stream<Item = AppMessage> {
+        stream::channel(100, async move |mut output: IcedSender<AppMessage>| {
+            use iced::futures::SinkExt;
+
+            let (setup_sender, mut setup_receiver) = channel::<Option<Arc<Queue<NodeAnalytics>>>>(1);
+            let _ = output.send(AppMessage::InternalControl(setup_sender)).await;
+            let proxy_queue = setup_receiver.recv().await.unwrap();
+
+            if proxy_queue.is_none() {
+                info!("No queue received. Running in test mode");
+                return;
+            }
+            let proxy_queue = proxy_queue.unwrap();
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                
+                let mut update_messages = Vec::new();
+                while !proxy_queue.is_empty() {
+                    let analytic = proxy_queue.pop();
+
+                    match analytic {
+                        Some(val) => {
+                            let send_message = (**val).clone();
+                            update_messages.push(send_message);
+                        }
+                        None => {}
+                    }
+                }
+
+                let _ = output.send(
+                    AppMessage::PipelineTable(PipelineTableMessage::StatusUpdate(update_messages))
+                );
+            }
+        })
+    }
+
+    pub fn subscription(&self) -> Subscription<AppMessage> {
+        Subscription::run(Self::get_analytics_worker)
     }
 
     pub fn update(&mut self, message: AppMessage) -> Task<AppMessage> {
@@ -47,6 +115,10 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
             }
             AppMessage::PipelineTable(msg) => {
                 let _ = self.node_overview_table.update(msg);
+                Task::none()
+            }
+            AppMessage::InternalControl(setup_sender) => {
+                let _ = setup_sender.try_send(self.analytics_proxy_queue.clone());
                 Task::none()
             }
         }
@@ -68,7 +140,6 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
                 .center_x(Fill)
                 .style(container_style);
 
-            info!("{}", size.height);
             let min_height_window = 600.0;
             let min_width_window = 1715.0;
             if size.width < min_width_window {
@@ -120,8 +191,10 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
     }
 }
 
-pub fn app_generator<const MAX_LOG_MESSAGES: usize>() -> impl Fn() -> App<MAX_LOG_MESSAGES> {
-    || App::new()
+pub fn app_generator<const MAX_LOG_MESSAGES: usize>(
+    analytics_sink: Option<Arc<Queue<NodeAnalytics>>>,
+) -> impl Fn() -> App<MAX_LOG_MESSAGES> {
+    move || App::new(analytics_sink.clone())
 }
 
 pub fn app_update<const MAX_LOG_MESSAGES: usize>(

@@ -15,7 +15,6 @@ use std::sync::Once;
 pub mod dsp;
 pub mod engine;
 pub mod general;
-pub mod gui;
 
 static INIT: Once = Once::new();
 

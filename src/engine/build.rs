@@ -1,18 +1,18 @@
 use crate::engine::data_plane::construction::node_build_vector::PipelineBuildVector;
-use crate::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, PipelineParameters};
+use crate::engine::data_plane::construction::unfinished_node_builder::PipelineInterfaceConfiguration;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use log::warn;
 use tokio::runtime::Runtime;
+use crate::engine::control_plane::background_proc_manager::BackgroundTaskManager;
 use crate::engine::control_plane::node_state_manager::{ExternalStopSource, InternodeStopAuthorityFactory};
 use crate::engine::control_plane::node_wrapper::{wrap_prepared_nodes, NodeWrapper};
 //use crate::engine::data_plane::construction::topology_verify::verify_pipeline_topology;
-use crate::engine::interface_layer::interface_hl::Interface;
 use crate::engine::control_plane::pipeline_graph::PipelineGraph;
 use crate::engine::control_plane::pipeline_hl::{Pipeline, PipelineScheduler};
 use crate::engine::control_plane::pipeline_analytics::PipelineAnalyticsSink;
-
+use crate::engine::zubr_dsp_config::PipelineParameters;
 
 pub type PipelineBuildRoutine = Box<dyn FnOnce(Rc<RefCell<PipelineBuildVector>>, PipelineParameters) -> ()>;
 
@@ -37,9 +37,9 @@ pub fn build_pipeline<Scheduler: PipelineScheduler>(
         warn!("Toplogy verification is disabled. Those checks are there for a reason!!!")
     }
     
-    let analytics_sink = match pipeline_parameters.pipeline_configuration {
-        PipelineInterfaceConfiguration::GUI | PipelineInterfaceConfiguration::TermFull => {
-            Some(Arc::new(PipelineAnalyticsSink::new(pipeline_parameters.analytics_sink_buffer_size)))
+    let analytics_sink = match &pipeline_parameters.analytics_parameters {
+        Some(parameters) => {
+            Some(PipelineAnalyticsSink::new(parameters.clone()))
         },
         _ => None
     };
@@ -47,8 +47,13 @@ pub fn build_pipeline<Scheduler: PipelineScheduler>(
     let (wrapped_nodes, external_stop_source) = wrap_prepared_nodes(prepared_nodes, &analytics_sink, pipeline_parameters.stop_broadcast_buffer_size);
     
     let graph = Arc::new(PipelineGraph::new(wrapped_nodes));
-    let scheduler: Scheduler = Scheduler::new(graph.clone(), pipeline_parameters, io_op_runtime);
-    let pipeline = Pipeline::new(scheduler, graph, external_stop_source, analytics_sink);
+    let scheduler: Scheduler = Scheduler::new(graph.clone(), pipeline_parameters.clone(), io_op_runtime.clone());
+    
+    let mut proc_manager = None;
+    if pipeline_parameters.proxied {
+        proc_manager = Some(BackgroundTaskManager::new(io_op_runtime.clone()));
+    }
+    let pipeline = Pipeline::new(scheduler, graph, external_stop_source, analytics_sink, proc_manager);
     
     Ok(pipeline)
 }

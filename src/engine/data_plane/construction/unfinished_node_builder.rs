@@ -11,7 +11,7 @@ use crate::engine::data_plane::structural::generic_pipeline_node::RunModel;
 use crate::engine::data_plane::structural::pipeline_type_traits::{Sharable, Unit};
 use std::cell::RefCell;
 use std::rc::Rc;
-
+use crate::engine::zubr_dsp_config::PipelineParameters;
 
 #[derive(Debug, Clone)]
 pub enum PipelineInterfaceConfiguration {
@@ -21,39 +21,6 @@ pub enum PipelineInterfaceConfiguration {
     Headless
 }
 
-
-#[derive(Clone)]
-pub struct PipelineParameters {
-    pub max_in_flight: usize,
-    pub num_compute_threads: usize,
-    pub stop_broadcast_buffer_size: usize,
-    pub analytics_sink_buffer_size: usize,
-    pub debug_analytic_interval: Option<u64>,
-    pub verify_topology: bool,
-    pub pipeline_configuration: PipelineInterfaceConfiguration
-}
-
-impl PipelineParameters {
-    pub fn new(
-        max_in_flight: usize, 
-        num_compute_threads: usize, 
-        debug_analytic_interval: Option<u64>,
-        verify_topology: bool,
-        pipeline_configuration: PipelineInterfaceConfiguration,
-        stop_broadcast_buffer_size: usize,
-        analytics_sink_buffer_size: usize,
-    ) -> Self {
-        Self {
-            max_in_flight,
-            num_compute_threads,
-            debug_analytic_interval,
-            verify_topology,
-            pipeline_configuration,
-            stop_broadcast_buffer_size,
-            analytics_sink_buffer_size
-        }
-    }
-}
 
 pub struct UnfinishedNodeBuilder<I: Sharable, O: Sharable, const NI: usize, const NO: usize> {
     node_predecessor: Rc<RefCell<Option<UnfinishedNode<I, O, NI, NO>>>>,
