@@ -23,49 +23,37 @@ pub trait PipelineScheduler {
 }
 
 
-enum AnalyticsSinkEnum {
-    Proxied(Arc<Queue<NodeAnalytics>>),
-    Direct(PipelineAnalyticsSink)
-}
-
 pub struct Pipeline<Scheduler: PipelineScheduler> {
     scheduler: Scheduler,
     node_graph: Arc<PipelineGraph>,
     external_stop_source: ExternalStopSource,
-    analytics_sink: Option<AnalyticsSinkEnum>,
+    analytics_queue: Option<Arc<Queue<NodeAnalytics>>>,
     background_proc_manager: Option<BackgroundTaskManager>
 }
 impl<Scheduler: PipelineScheduler> Pipeline<Scheduler> {
-    pub fn new(scheduler: Scheduler, node_graph: Arc<PipelineGraph>, external_stop_source: ExternalStopSource, analytics_sink: Option<PipelineAnalyticsSink>, background_manager: Option<BackgroundTaskManager>) -> Self {
-        let analytics_sink = match analytics_sink {
-            Some(sink) => Some(AnalyticsSinkEnum::Direct(sink)),
-            None => None
+    pub fn new_headless(scheduler: Scheduler, node_graph: Arc<PipelineGraph>, external_stop_source: ExternalStopSource) -> Self {
+        let mut pipeline = Self {
+            scheduler,
+            node_graph,
+            external_stop_source,
+            analytics_queue: None,
+            background_proc_manager: None,
         };
+
+        pipeline
+    }
+
+    pub fn new_head(scheduler: Scheduler, node_graph: Arc<PipelineGraph>, external_stop_source: ExternalStopSource, mut analytics_sink: PipelineAnalyticsSink, mut background_manager: BackgroundTaskManager) -> Self{
+        let analytics_queue = analytics_sink.get_proxy_queue();
+        background_manager.add_task("analytics sink".to_string(), Box::new(analytics_sink));
 
         let mut pipeline = Self {
             scheduler,
             node_graph,
             external_stop_source,
-            analytics_sink,
-            background_proc_manager: background_manager,
+            analytics_queue: Some(analytics_queue),
+            background_proc_manager: Some(background_manager)
         };
-        match &mut pipeline.background_proc_manager {
-            Some(proc_manager) => {
-                match pipeline.analytics_sink {
-                    Some()
-                }
-                if pipeline.analytics_sink.is_some() {
-                    let mut sink = pipeline.analytics_sink.take().unwrap();
-                    proc_manager.add_task(
-                        String::from("Analytics Sink"),
-                        Box::pin(async move {
-                            sink.get_analytics_task().await
-                        })
-                    )
-                }
-            }
-            None => {}
-        }
 
         pipeline
     }
@@ -78,7 +66,7 @@ impl<Scheduler: PipelineScheduler> Pipeline<Scheduler> {
     pub fn stop(&mut self) {
         self.scheduler.scheduler_stop();
     }
-    pub fn get_analytics_sink(&self) -> &Option<PipelineAnalyticsSink> {
-        &self.analytics_sink
+    pub fn get_analytics_queue(&self) -> Option<Arc<Queue<NodeAnalytics>>> {
+        self.analytics_queue.clone()
     }
 }

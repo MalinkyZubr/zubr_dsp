@@ -171,7 +171,7 @@ impl NodeWrapper {
     pub fn generate_run(self) -> Result<RunType, Self> {
         debug!("Generating run for {}", self.name);
         if !self.node.is_ready_exec(self.state_manager.get_state()) {
-            warn!("Node {} not ready to execute", self.id);
+            debug!("Node {} not ready to execute", self.id);
             return Err(self);
         }
         match self.state_manager.get_state() {

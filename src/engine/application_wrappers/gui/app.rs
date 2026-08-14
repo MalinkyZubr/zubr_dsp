@@ -17,14 +17,17 @@ use iced::widget::{
 };
 use iced::Length::Fixed;
 use iced::{event, Center, Element, Fill, FillPortion, Shrink, Size, Subscription, Task};
-use log::{info, Level};
+use log::{error, info, Level};
 use scc::Queue;
 use std::future::Future;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use futures::StreamExt;
+use iced::futures::stream::BoxStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use crate::engine::control_plane::logging::LOG_QUEUE_POP_ALL;
 
 pub struct App<const MAX_LOG_MESSAGES: usize> {
     // UI components
@@ -36,6 +39,10 @@ pub struct App<const MAX_LOG_MESSAGES: usize> {
     analytics_proxy_queue: Option<Arc<Queue<NodeAnalytics>>>,
 }
 
+
+// pub enum InternalControlMessage {
+//     AnalyticsSetup(Sender<Option<Arc<Queue<NodeAnalytics>>>>),
+// }
 #[derive(Debug, Clone)]
 pub enum AppMessage {
     CncWindow(CncMessage),
@@ -63,8 +70,9 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
     //     ))
     // }
 
-    fn get_analytics_worker() -> impl Stream<Item = AppMessage> {
+    fn get_analytics_worker() -> BoxStream<'static, AppMessage> {
         stream::channel(100, async move |mut output: IcedSender<AppMessage>| {
+            error!("Starting Subscribe");
             use iced::futures::SinkExt;
 
             let (setup_sender, mut setup_receiver) = channel::<Option<Arc<Queue<NodeAnalytics>>>>(1);
@@ -76,9 +84,11 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
                 return;
             }
             let proxy_queue = proxy_queue.unwrap();
+
+
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                
+
                 let mut update_messages = Vec::new();
                 while !proxy_queue.is_empty() {
                     let analytic = proxy_queue.pop();
@@ -94,13 +104,29 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
 
                 let _ = output.send(
                     AppMessage::PipelineTable(PipelineTableMessage::StatusUpdate(update_messages))
-                );
+                ).await;
             }
-        })
+        }).boxed()
+    }
+
+    fn get_logs_worker() -> BoxStream<'static, AppMessage> {
+        stream::channel(100, async move |mut output: IcedSender<AppMessage>| {
+            use iced::futures::SinkExt;
+
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+
+                let logs = LOG_QUEUE_POP_ALL();
+
+                let _ = output.send(
+                    AppMessage::LogMonitor(LogMessage::PushLogMessages(logs))
+                ).await;
+            }
+        }).boxed()
     }
 
     pub fn subscription(&self) -> Subscription<AppMessage> {
-        Subscription::run(Self::get_analytics_worker)
+        Subscription::batch(vec![Subscription::run(Self::get_analytics_worker), Subscription::run(Self::get_logs_worker)])
     }
 
     pub fn update(&mut self, message: AppMessage) -> Task<AppMessage> {
@@ -118,7 +144,11 @@ impl<const MAX_LOG_MESSAGES: usize> App<MAX_LOG_MESSAGES> {
                 Task::none()
             }
             AppMessage::InternalControl(setup_sender) => {
-                let _ = setup_sender.try_send(self.analytics_proxy_queue.clone());
+                let res = setup_sender.try_send(self.analytics_proxy_queue.clone());
+                match res {
+                    Ok(()) => error!("Analytics subscribe complete"),
+                    Err(_) => error!("Analytics subscribe failed"),
+                }
                 Task::none()
             }
         }
@@ -206,4 +236,8 @@ pub fn app_update<const MAX_LOG_MESSAGES: usize>(
 
 pub fn app_view<const MAX_LOG_MESSAGES: usize>(app: &App<MAX_LOG_MESSAGES>) -> Element<AppMessage> {
     app.view()
+}
+
+pub fn app_subscription<const MAX_LOG_MESSAGES: usize>(app: &App<MAX_LOG_MESSAGES>) -> Subscription<AppMessage> {
+    app.subscription()
 }

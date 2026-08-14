@@ -2,17 +2,24 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use async_trait::async_trait;
 use tokio::{select, spawn};
 use tokio::runtime::Runtime;
 use tokio::sync::watch::{channel, Receiver, Sender};
 
 
+#[async_trait]
+pub trait BackgroundTaskTrait: Send {
+    async fn task_run(&mut self);
+}
+
+
 pub struct BackgroundTask {
-    task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
+    task: Box<dyn BackgroundTaskTrait>,
     kill_switch: Receiver<()>
 }
 impl BackgroundTask {
-    pub fn new(kill_switch: Receiver<()>, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BackgroundTask {
+    pub fn new(kill_switch: Receiver<()>, task: Box<dyn BackgroundTaskTrait>) -> BackgroundTask {
         BackgroundTask {
             task, kill_switch
         }
@@ -22,7 +29,7 @@ impl BackgroundTask {
         
         while !kill_flag {
             select! {
-                _ = &mut self.task => {},
+                _ = &mut self.task.task_run() => {},
                 _ = self.kill_switch.changed() => {
                     kill_flag = true
                 }
@@ -46,7 +53,7 @@ impl BackgroundTaskManager {
         }
     }
     
-    pub fn add_task(&mut self, task_name: String, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
+    pub fn add_task(&mut self, task_name: String, task: Box<dyn BackgroundTaskTrait>) {
         let (sender, receiver) = channel(());
         let task_obj = BackgroundTask::new(receiver, task);
         self.registered_tasks.insert(task_name.clone(), self.runtime.spawn(task_obj.run()));

@@ -117,9 +117,29 @@ impl ExternalStopSource {
         receiver
     }
     
-    pub fn update_stop_request(&mut self, node_id: usize, stop_requested: bool) -> Result<(), error::SendError<bool>>{
-        self.stop_requested.insert(node_id, stop_requested);
-        self.stop_sources.get_mut(&node_id).unwrap().send(stop_requested)
+    pub fn update_stop_request(&mut self, node_id: usize, stop_requested: bool) -> Result<(), error::SendError<bool>> {
+        if self.stop_sources.contains_key(&node_id) {
+            self.stop_requested.insert(node_id, stop_requested);
+            self.stop_sources.get_mut(&node_id).unwrap().send(stop_requested)
+        }
+        else {
+            Err(error::SendError(true))
+        }
+    }
+
+    pub fn update_stop_request_all(&mut self, stop_requested: bool) -> Result<(), error::SendError<bool>> {
+        for (node_id, sender) in self.stop_sources.iter_mut() {
+            let node_id_clone = node_id.clone();
+            self.stop_requested.insert(node_id_clone, stop_requested);
+            match sender.send(stop_requested) {
+                Ok(()) => (),
+                Err(error) => {
+                    return Err(error)
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

@@ -1,3 +1,4 @@
+use std::io;
 use std::sync::Arc;
 use iced::Theme;
 use rodio::{OutputStreamBuilder, Sink};
@@ -47,5 +48,7 @@ pub fn audio_gui() -> Result<(), String> {
     let mut app = ZubrDSPApplication::<ThreadPoolTopographicalHandle>::new_gui(build_function, PipelineParameters::standard(), rt);
     app.start();
     app.stop();
+    // println!("Press enter to stop");
+    // io::stdin().read_line(&mut String::new()).unwrap();
     Ok(())
 }

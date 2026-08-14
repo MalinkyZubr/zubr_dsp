@@ -4,14 +4,17 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use async_trait::async_trait;
+use log::error;
 use num::integer::Roots;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use crate::engine::control_plane::background_proc_manager::BackgroundTaskTrait;
 use crate::engine::control_plane::node_wrapper::NodeWrapper;
 use crate::engine::data_plane::structural::generic_pipeline_node::RunModel;
 use crate::engine::zubr_dsp_config::PipelineAnalyticsParameters;
 
 #[derive(Debug, Clone)]
-pub struct NodeAnalytics {
+pub struct NodeAnalytics { // would be better to also have executions per second
     pub id: usize,
     pub name: String,
     pub run_model: RunModel,
@@ -24,18 +27,24 @@ pub struct NodeAnalytics {
 pub struct PipelineAnalyticsSink {
     analytic_receiver: Receiver<NodeAnalytics>,
     analytic_sender: Sender<NodeAnalytics>,
-    analytic_storage: HashMap<usize, NodeAnalytics>,
     analytic_proxy_queue: Arc<Queue<NodeAnalytics>>,
+    analytic_proxy_queue_size: usize,
     analytics_interval: usize
 }
 impl PipelineAnalyticsSink {
     pub fn new(pipeline_analytics_parameters: PipelineAnalyticsParameters) -> PipelineAnalyticsSink {
         let (sender, receiver) = channel(pipeline_analytics_parameters.analytics_sink_buffer_size);
+        let mut analytics_queue_size = pipeline_analytics_parameters.analytics_sink_buffer_size;
+
+        if analytics_queue_size < 8 {
+            analytics_queue_size = 8
+        }
+
         PipelineAnalyticsSink {
             analytic_receiver: receiver,
             analytic_sender: sender,
-            analytic_storage: HashMap::new(),
             analytic_proxy_queue: Arc::new(Queue::new()),
+            analytic_proxy_queue_size: analytics_queue_size,
             analytics_interval: pipeline_analytics_parameters.analytics_interval
         }
     }
@@ -44,43 +53,25 @@ impl PipelineAnalyticsSink {
         PipelineAnalyticsSource::new(self.analytic_sender.clone(), id, name, run_model, self.analytics_interval)
     }
 
-    pub async fn get_analytics_task(
-        &mut self
-    ) -> () {
+    pub fn get_proxy_queue(&self) -> Arc<Queue<NodeAnalytics>> {
+        self.analytic_proxy_queue.clone()
+    }
+}
+
+
+#[async_trait]
+impl BackgroundTaskTrait for PipelineAnalyticsSink {
+    async fn task_run(&mut self) {
         let analytic = self.analytic_receiver.recv().await;
         match analytic {
             Some(analytic) => {
+                if self.analytic_proxy_queue.len() > self.analytic_proxy_queue_size {
+                    self.analytic_proxy_queue.pop(); // enforce the queue size limitation
+                }
                 let _ = self.analytic_proxy_queue.push(analytic);
             }
             None => (),
         }
-    }
-    
-    pub async fn receive_analytics(&mut self) -> Option<usize> {
-        let analytic = self.analytic_receiver.recv().await;
-        match analytic {
-            Some(analytic) => {
-                let id = analytic.id;
-                let _ = self.analytic_storage.insert(id, analytic);
-                Some(id)
-            }
-            None => None,
-        }
-    }
-
-    pub fn get_analytics_value(&self, id: usize) -> Option<NodeAnalytics> {
-        if let Some(analytic) = self.analytic_storage.get(&id) {
-            Some(analytic.clone())
-        }
-        else { None }
-    }
-
-    pub async fn get_analytics_snapshot(&self) -> HashMap<usize, NodeAnalytics> {
-        self.analytic_storage.clone()
-    }
-
-    pub fn get_proxy_queue(&self) -> Arc<Queue<NodeAnalytics>> {
-        self.analytic_proxy_queue.clone()
     }
 }
 
@@ -107,9 +98,10 @@ impl RollingStatTracker {
         self.buffer.push_back(value);
 
         let old_average = self.current_average;
-        self.current_average = old_average + (value - oldest_value) / self.buffer_size;
-        self.current_standard_deviation = (self.current_standard_deviation + (value - oldest_value) *
-            (value + oldest_value - self.current_average - old_average) /
+
+        self.current_average = old_average + value.abs_diff(oldest_value) / self.buffer_size;
+        self.current_standard_deviation = (self.current_standard_deviation + value.abs_diff(oldest_value) *
+            (value + oldest_value.abs_diff(self.current_average.abs_diff(old_average))) /
             (self.buffer_size - 1)).sqrt();
     }
 
@@ -151,7 +143,7 @@ impl PipelineAnalyticsSource {
     pub fn exit_execution(&mut self) {
         let dur = self.start.elapsed();
 
-        self.rolling_stat_tracker.push_sample(dur.as_nanos());
+        self.rolling_stat_tracker.push_sample(dur.as_nanos() as u128);
         self.analytics_index += 1;
 
         if self.analytics_index >= self.analytics_interval {
@@ -166,8 +158,8 @@ impl PipelineAnalyticsSource {
             id: self.id,
             name: self.name.clone(),
             run_model: self.run_model.clone(),
-            average_execution_time: average_exec_time,
-            standard_deviation_execution_time: standard_deviation_exec_time,
+            average_execution_time: average_exec_time as u128,
+            standard_deviation_execution_time: standard_deviation_exec_time as u128,
             current_state: self.current_state,
         }
     }

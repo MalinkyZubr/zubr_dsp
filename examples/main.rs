@@ -14,7 +14,7 @@ use crate::gui::audio_gui;
 
 fn main() {
     unsafe { backtrace_on_stack_overflow::enable() };
-    initiate_pipeline(Level::Info);
+    initiate_pipeline(Level::Error);
     let examples = BTreeMap::from(
         [
             ("audio_test",audio_test as fn() -> Result<(), String>),

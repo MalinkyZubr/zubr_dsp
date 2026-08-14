@@ -42,7 +42,7 @@ impl PipelineParameters {
             stop_broadcast_buffer_size: 32,
             analytics_parameters: Some(
                 PipelineAnalyticsParameters {
-                    analytics_interval: 1024,
+                    analytics_interval: 128,
                     analytics_sink_buffer_size: 1024
                 }
             ),

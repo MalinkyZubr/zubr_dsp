@@ -10,6 +10,7 @@ use itertools::Itertools;
 use std::time;
 use std::time::UNIX_EPOCH;
 use iced::widget::text::Wrapping;
+use log::error;
 use crate::engine::control_plane::pipeline_hl::Pipeline;
 use crate::engine::application_wrappers::gui::log_monitor::LogMonitor;
 use crate::engine::application_wrappers::gui::style::container_style;

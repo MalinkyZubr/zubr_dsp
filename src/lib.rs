@@ -8,7 +8,7 @@
 #![feature(unboxed_closures)]
 extern crate core;
 
-use crate::engine::control_plane::logging::init_stdout_logger;
+use crate::engine::control_plane::logging::{init_full_logger, init_stdout_logger};
 use log::Level;
 use std::sync::Once;
 
@@ -19,7 +19,7 @@ pub mod general;
 static INIT: Once = Once::new();
 
 pub fn initiate_pipeline(log_level: Level) {
-    INIT.call_once(|| if let Err(_) = init_stdout_logger(log_level) {});
+    INIT.call_once(|| if let Err(_) = init_full_logger(log_level) {});
 }
 
 // use engine::control_plane::logging::initialize_logger;

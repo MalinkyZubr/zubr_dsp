@@ -15,7 +15,6 @@ pub struct CncWindow {
 
 #[derive(Debug, Clone)]
 pub enum CncMessage {
-    Kill,
     Pause,
     Start
 }
@@ -29,7 +28,6 @@ impl CncWindow {
     
     pub fn update(&mut self, message: CncMessage) -> Task<CncMessage> {
         match message {
-            CncMessage::Kill => {info!("GUI: Kill message")},
             CncMessage::Pause => {info!("GUI: Pause message")},
             CncMessage::Start => {info!("GUI: Start message")}
         };
@@ -37,12 +35,11 @@ impl CncWindow {
     }
 
     pub fn view(&self) -> Element<'_, CncMessage> {
-        let kill_button = button("Kill").on_press(CncMessage::Kill);
         let pause_button = button("Pause").on_press(CncMessage::Pause);
         let start_button = button("Start").on_press(CncMessage::Start);
         let window_title = text("  ZubrDSP: Control").size(20);
         
-        let control_buttons = container(row![start_button, pause_button, kill_button]
+        let control_buttons = container(row![start_button.width(Fill), pause_button.width(Fill)]
             .spacing(10)
         );
         let content = container(column![window_title, control_buttons]

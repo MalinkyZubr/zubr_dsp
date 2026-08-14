@@ -53,7 +53,14 @@ pub fn build_pipeline<Scheduler: PipelineScheduler>(
     if pipeline_parameters.proxied {
         proc_manager = Some(BackgroundTaskManager::new(io_op_runtime.clone()));
     }
-    let pipeline = Pipeline::new(scheduler, graph, external_stop_source, analytics_sink, proc_manager);
     
+    let pipeline;
+    match (analytics_sink, proc_manager) {
+        (Some(analytics_sink), Some(proc_manager)) => {
+            pipeline = Pipeline::new_head(scheduler, graph, external_stop_source, analytics_sink, proc_manager);
+        }
+        (_, _) => pipeline = Pipeline::new_headless(scheduler, graph, external_stop_source)
+    }
+
     Ok(pipeline)
 }

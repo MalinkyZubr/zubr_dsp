@@ -1,13 +1,15 @@
 use iced::widget::{button, checkbox, column, container, pick_list, row, scrollable, text};
 use iced::{Element, Fill, Task};
-use log::{info, Level};
+use log::{error, info, trace, Level};
 use std::borrow::Borrow;
+use std::collections::VecDeque;
 use iced::widget::text::Wrapping::WordOrGlyph;
 use crate::engine::application_wrappers::gui::style::{container_style, log_window_style};
+use crate::engine::control_plane::logging::{init_full_logger, SET_LOG_LEVEL};
 
 #[derive(Debug, Default)]
 pub struct LogMonitor<const MaxLogSize: usize> {
-    log_string: String,
+    logs: VecDeque<String>,
     log_level: LevelWrapper,
     logging: bool,
 }
@@ -64,43 +66,61 @@ pub(crate) enum LogMessage {
     ToggleLogging,
     ClearLogWindow,
     SetLogLevel(LevelWrapper),
+    PushLogMessages(Vec<String>)
 }
 
 impl<const MaxLogSize: usize> LogMonitor<MaxLogSize> {
     fn new() -> Self {
         Self::default()
     }
-    fn push_log_message(&mut self, message: String) {
-        if self.logging {
-            self.log_string.push_str(&message);
-            if self.log_string.len() > MaxLogSize {
-                self.log_string
-                    .drain(0..(self.log_string.len() - MaxLogSize));
-            }
-        }
-    }
     pub fn update(&mut self, message: LogMessage) -> Task<LogMessage> {
         match message {
             LogMessage::ToggleLogging => {
                 self.logging = !self.logging;
-                info!("Logging: {}", self.logging);
+                let level_filter;
+                if !self.logging {
+                    error!("Logging: {}", self.logging);
+                    level_filter = log::LevelFilter::Off;
+                }
+                else {
+                    level_filter = self.log_level.to_real_level().to_level_filter()
+                }
+                SET_LOG_LEVEL(level_filter);
+                if self.logging {
+                    error!("Logging: {}", self.logging);
+                }
+
                 Task::none()
             }
             LogMessage::ClearLogWindow => {
-                self.log_string.clear();
+                self.logs.clear();
                 info!("Clear log window");
                 Task::none()
             }
             LogMessage::SetLogLevel(level) => {
-                self.log_string = String::from(level.to_string());
-                info!("Log level: {:?}", level);
+                self.log_level = level;
+                error!("Log level: {:?}", level);
+                SET_LOG_LEVEL(level.to_real_level().to_level_filter());
+                trace!("For your information I am gooning");
+                Task::none()
+            }
+            LogMessage::PushLogMessages(mut messages) => {
+                while !messages.is_empty() {
+                    let message = messages.pop().unwrap();
+                    if self.logs.len() > MaxLogSize {
+                        self.logs.pop_front();
+                    }
+                    self.logs.push_back(message);
+                }
+
                 Task::none()
             }
         }
     }
 
     pub fn view(&self) -> Element<'_, LogMessage> {
-        let log_monitor = container(scrollable(text(self.log_string.clone())).height(Fill).width(Fill)).style(log_window_style);
+        let log_string = self.logs.iter().fold(String::new(), |acc, x| acc + &x.to_string() + "\n________________________\n");
+        let log_monitor = container(scrollable(text(log_string)).height(Fill).width(Fill)).style(log_window_style);
         let clear_button = button(text("Clear Logs").wrapping(WordOrGlyph).width(Fill))
             .padding(10)
             .on_press(LogMessage::ClearLogWindow);

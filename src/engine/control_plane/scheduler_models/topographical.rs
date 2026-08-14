@@ -10,9 +10,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use tokio::runtime::{Handle, Runtime};
 
-pub trait ThreadTaskTopographical {
-    fn execute(&mut self) -> (Vec<Arc<dyn ThreadTaskTopographical>>, bool);
-}
 
 pub struct ThreadPoolTopographical {
     thread_pool: Arc<RayonPool>,
@@ -82,7 +79,7 @@ impl ThreadPoolTopographical {
                         node
                     }
                     None => {
-                        warn!(
+                        info!(
                             "Node {} not available in graph (may already be running)",
                             node_id,
                         );
