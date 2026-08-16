@@ -1,21 +1,31 @@
 mod basic;
+mod gui;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use log::Level;
 use basic::audio_test::audio_test;
-use basic::am_end_to_end::am_end_to_end_test;
+//use basic::am_end_to_end::am_end_to_end_test;
 use zubr_dsp::initiate_pipeline;
+use crate::basic::am_end_to_end::am_end_to_end_test;
+use crate::basic::am_rtl_sdr::am_sdr_test;
+use crate::basic::fft_audio::fft_audio_test;
 use crate::basic::io_bound_breaker_reassemble::io_bound_breaker_reassemble_test;
+use crate::gui::audio_gui;
+// use crate::basic::io_bound_breaker_reassemble::io_bound_breaker_reassemble_test;
 
 fn main() {
     unsafe { backtrace_on_stack_overflow::enable() };
     initiate_pipeline(Level::Error);
-    let examples = HashMap::from(
+    let examples = BTreeMap::from(
         [
             ("audio_test",audio_test as fn() -> Result<(), String>),
             ("am_end_to_end", am_end_to_end_test as fn() -> Result<(), String>),
-            ("io_bound_breaker_reassemble_test", io_bound_breaker_reassemble_test as fn() -> Result<(), String>)
+            ("am_rtl", am_sdr_test as fn() -> Result<(), String>),
+            ("io_bound_breaker_reassemble_test", io_bound_breaker_reassemble_test as fn() -> Result<(), String>),
+            ("fft_audio", fft_audio_test as fn() -> Result<(), String>),
+            ("basic_gui", gui::basic::basic_gui as fn() -> Result<(), String>),
+            ("audio_gui", audio_gui::audio_gui as fn() -> Result<(), String>),
         ]
     );
 

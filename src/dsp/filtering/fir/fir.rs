@@ -1,6 +1,6 @@
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray};
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use num::Complex;
 use num_traits::{cast, Num, NumCast};
 use rustfft::{Fft, FftNum, FftPlanner};
@@ -59,11 +59,11 @@ impl<T: Sharable + Num + Copy + NumCast + FftNum, const TOTAL_FILTER_SIZE: usize
         1,
     > for FIRFilter<T, TOTAL_FILTER_SIZE>
 {
-    fn run_cpu(&mut self, _input: &mut [DataWrapper<BufferArray<Complex<T>, TOTAL_FILTER_SIZE>>; 1], _output: &mut DataWrapper<BufferArray<Complex<T>, TOTAL_FILTER_SIZE>>) -> Result<(), ()> {
-        for (coefficient, input_bin) in self.coefficients.read().iter().zip(_input[0].read().read_mut()) {
+    fn run_cpu(&mut self, _input: &mut [BufferArray<Complex<T>, TOTAL_FILTER_SIZE>; 1], _output: &mut BufferArray<Complex<T>, TOTAL_FILTER_SIZE>) -> Result<(), ()> {
+        for (coefficient, input_bin) in self.coefficients.read().iter().zip(_input[0].read_mut()) {
             *input_bin = *coefficient * *input_bin;
         }
-        _output.swap_st(&mut _input[0]);
+        _output.swap_pointers(&mut _input[0]);
         Ok( ())
     }
 }

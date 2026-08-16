@@ -1,8 +1,7 @@
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::communication_layer::generic_constraints::*;
-use crate::engine::structural::generic_node_operation::*;
-use crate::engine::structural::pipeline_type_traits::*;
+use crate::engine::data_plane::structural::pipeline_type_traits::{Sharable, True};
 use num::Num;
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 
 pub struct OverlapSaveBreaker<
     T: Num + Sharable,
@@ -12,7 +11,7 @@ pub struct OverlapSaveBreaker<
     const NUM_CHUNKS: usize,
     const UNPADDED_FILTER_SIZE: usize,
 > where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize ]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
@@ -38,7 +37,7 @@ impl<
         UNPADDED_FILTER_SIZE,
     >
 where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize ]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
@@ -78,22 +77,20 @@ impl<
         UNPADDED_FILTER_SIZE,
     >
 where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
-    }]: True,
+    }]: True, T: Copy
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, INPUT_SIZE>>; 1],
-        output: &mut DataWrapper<
+        input: &mut [BufferArray<T, INPUT_SIZE>; 1],
+        output: &mut 
             BufferArray<BufferArray<T, { OVERLAPPING_BLOCK_SIZE }>, { NUM_CHUNKS }>,
-        >,
     ) -> Result<(), ()> {
-        let size = input[0].read_immut().len();
+        let size = input[0].read().len();
         let chunks = input[0]
-            .read()
             .read_mut()
             .chunks_mut(NON_OVERLAPPING_BLOCK_SIZE);
         for (idx, chunk) in chunks.enumerate() {
@@ -108,7 +105,7 @@ where
                 &chunk[chunk.len() - (OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE)..],
             )
         }
-        output.swap(&mut self.internal_buffer);
+        output.swap_pointers(&mut self.internal_buffer);
         Ok(())
     }
 }
@@ -120,7 +117,7 @@ pub struct OverlapSaveCombiner<
     const NUM_CHUNKS: usize, // the number of chunks to break the input into, each of size OVERLAPPING_BLOCK_SIZE
     const UNPADDED_FILTER_SIZE: usize, // the size of the unpadded filter, the filter size minus however many 0 coefficients are added
 > where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize ]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
@@ -141,7 +138,7 @@ impl<
         UNPADDED_FILTER_SIZE,
     >
 where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize ]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
@@ -173,7 +170,7 @@ impl<
         UNPADDED_FILTER_SIZE,
     >
 where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize ]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
@@ -181,18 +178,17 @@ where
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<BufferArray<T, OVERLAPPING_BLOCK_SIZE>, NUM_CHUNKS>>;
+        input: &mut [BufferArray<BufferArray<T, OVERLAPPING_BLOCK_SIZE>, NUM_CHUNKS>;
                  1],
-        output: &mut DataWrapper<BufferArray<T, INPUT_SIZE>>,
+        output: &mut BufferArray<T, INPUT_SIZE>,
     ) -> Result<(), ()> {
         for (idx, output_chunk) in output
-            .read()
             .read_mut()
             .chunks_mut(NON_OVERLAPPING_BLOCK_SIZE)
             .enumerate()
         {
             output_chunk.swap_with_slice(
-                &mut input[0].read().get_mut(idx).read_mut()
+                &mut input[0].get_mut(idx).read_mut()
                     [OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE..],
             );
         }
@@ -234,7 +230,7 @@ pub fn generate_overlap_save_steps<
     >,
 )
 where
-    [(); { (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize }]: True,
+    [(); (INPUT_SIZE / NON_OVERLAPPING_BLOCK_SIZE == NUM_CHUNKS) as usize]: True,
     [(); {
         (NON_OVERLAPPING_BLOCK_SIZE <= OVERLAPPING_BLOCK_SIZE - NON_OVERLAPPING_BLOCK_SIZE + 1)
             as usize
@@ -246,7 +242,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::communication_layer::data_management::*;
 
     #[test]
     fn test_overlap_save_breaker_new() {
@@ -269,29 +264,27 @@ mod tests {
         let reference_buffer: [f32; 1024] = rand::random();
         let input_buffer = BufferArray::new_with_value(reference_buffer.clone());
 
-        let mut input_wrapper = DataWrapper::new_with_value(input_buffer);
+        let mut input_wrapper = input_buffer;
         let mut input = [input_wrapper];
-
-        let mut output_wrapper = DataWrapper::new();
-
-        let result = breaker.run_cpu(&mut input, &mut output_wrapper);
+        
+        let mut output = BufferArray::new();
+        let result = breaker.run_cpu(&mut input, &mut output);
 
         assert!(result.is_ok());
 
-        let first_output = output_wrapper.read().get(0).read();
+        let first_output = output.get(0).read();
         assert_eq!(first_output[0..16], [0.0; 16]);
 
-        println!("THIRD CHUNK: {:?}", output_wrapper.read().get(2).read());
+        println!("THIRD CHUNK: {:?}", output.get(2).read());
 
-        for (idx, chunk) in output_wrapper
-            .read_immut()
+        for (idx, chunk) in output
             .read()
             .iter()
             .skip(1)
             .enumerate()
         {
             let out_chunk_ref = chunk.read();
-            let prev_chunk_ref = output_wrapper.read_immut().get(idx).read();
+            let prev_chunk_ref = output.get(idx).read();
             println!("OUT CUnK {:?}", out_chunk_ref);
             println!("PREV CUNK {:?}", prev_chunk_ref);
             assert_eq!(out_chunk_ref[0..16], prev_chunk_ref[16..]);
@@ -311,18 +304,18 @@ mod tests {
         let reference_buffer: [f32; 1024] = rand::random();
         let input_buffer = BufferArray::new_with_value(reference_buffer.clone());
 
-        let mut input_wrapper = DataWrapper::new_with_value(input_buffer);
+        let mut input_wrapper = input_buffer;
         let mut input = [input_wrapper];
 
-        let mut output_wrapper_1 = DataWrapper::new();
+        let mut output_wrapper_1 = BufferArray::new();
 
         let result_1 = breaker.run_cpu(&mut input, &mut output_wrapper_1);
         assert!(result_1.is_ok());
 
-        let mut output_wrapper_2 = DataWrapper::new();
+        let mut output_wrapper_2 = BufferArray::new();
         let result_2 = combiner.run_cpu(&mut [output_wrapper_1], &mut output_wrapper_2);
         assert!(result_2.is_ok());
 
-        assert!(output_wrapper_2.read().read() == &reference_buffer);
+        assert!(output_wrapper_2.read() == &reference_buffer);
     }
 }

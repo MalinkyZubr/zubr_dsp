@@ -2,8 +2,8 @@ use num::complex::Complex;
 use num::Num;
 use num_traits::cast::cast;
 use num_traits::NumCast;
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::structural::pipeline_type_traits::*;
+use crate::engine::data_plane::communication_layer::data_management::*;
+use crate::engine::data_plane::structural::pipeline_type_traits::*;
 
 pub type TFGenerator<T: Num + Sharable + NumCast, const N: usize> = fn() -> BufferArray<Complex<T>, N>;
 

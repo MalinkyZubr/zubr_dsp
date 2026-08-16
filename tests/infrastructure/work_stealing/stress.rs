@@ -10,8 +10,6 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::Arc;
-    use zubr_dsp::pipeline::communication_layer::data_management::BufferArray;
-
     use log::{error, Level};
 
     use tokio::sync::mpsc::{channel, Receiver};

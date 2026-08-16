@@ -1,9 +1,11 @@
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
+use std::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 use log::warn;
 use num::Complex;
 use rustfft::{Fft, FftNum, FftPlanner};
 use std::sync::Arc;
+use num_traits::{cast, NumCast};
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 
 pub struct FFT<T: FftNum, const BUFFER_SIZE: usize> {
     fft: Arc<dyn Fft<T>>,
@@ -29,11 +31,11 @@ impl<T: FftNum + Default, const BUFFER_SIZE: usize>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<Complex<T>, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<BufferArray<Complex<T>, BUFFER_SIZE>>,
+        input: &mut [BufferArray<Complex<T>, BUFFER_SIZE>; 1],
+        output: &mut BufferArray<Complex<T>, BUFFER_SIZE>,
     ) -> Result<(), ()> {
-        self.fft.process(input[0].read().read_mut());
-        output.swap_st(&mut input[0]);
+        self.fft.process(input[0].read_mut());
+        output.swap_pointers(&mut input[0]);
         Ok(())
     }
 }
@@ -58,17 +60,22 @@ impl<T: FftNum, const BUFFER_SIZE: usize> IFFT<T, BUFFER_SIZE> {
 }
 
 
-impl<T: FftNum + Default, const BUFFER_SIZE: usize>
-PipelineNodeOp<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
+impl<T: FftNum + Default + DivAssign + AddAssign + MulAssign + RemAssign + SubAssign + NumCast, const BUFFER_SIZE: usize>
+    PipelineNodeOp<BufferArray<Complex<T>, BUFFER_SIZE>, BufferArray<Complex<T>, BUFFER_SIZE>, 1>
 for IFFT<T, BUFFER_SIZE>
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<Complex<T>, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<BufferArray<Complex<T>, BUFFER_SIZE>>,
+        input: &mut [BufferArray<Complex<T>, BUFFER_SIZE>; 1],
+        output: &mut BufferArray<Complex<T>, BUFFER_SIZE>,
     ) -> Result<(), ()> {
-        self.fft.process(input[0].read().read_mut());
-        output.swap_st(&mut input[0]);
+        self.fft.process(input[0].read_mut());
+        output.swap_pointers(&mut input[0]);
+        
+        for value in output.read_mut().iter_mut() {
+            *value /= cast::<usize, T>(BUFFER_SIZE).unwrap();
+        }
+        
         Ok(())
     }
 }

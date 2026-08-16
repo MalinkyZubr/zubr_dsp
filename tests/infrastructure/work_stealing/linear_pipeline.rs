@@ -1,100 +1,101 @@
-use serial_test::serial;
-
 #[cfg(test)]
-#[serial]
 mod tests {
-    use tokio::runtime::Runtime;
-use crate::infrastructure::test_models::{
-        verify_input_output, TestLinearI32Mult, TestSinkI32, TestSourceI32,
-    };
-    use std::cell::RefCell;
-    use std::rc::Rc;
-    use std::sync::Arc;
-    use zubr_dsp::pipeline::communication_layer::data_management::BufferArray;
-
+    use crate::infrastructure::test_models::TestSourceI32;
+    use crate::infrastructure::test_models::{verify_input_output, TestLinearI32Mult, TestSinkI32};
     use log::{error, Level};
+    use std::sync::Arc;
+    use tokio::runtime::Runtime;
+    use zubr_dsp::engine::build::build_pipeline;
+    use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
+    use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
+    use zubr_dsp::engine::data_plane::communication_layer::data_management::BufferArray;
+    use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::UnfinishedNodeBuilder;
+    use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::PipelineInterfaceConfiguration;
+    use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel;
 
     use tokio::sync::mpsc::{channel, Receiver};
+    use zubr_dsp::engine::zubr_dsp_config::PipelineParameters;
     use zubr_dsp::initiate_pipeline;
-    use zubr_dsp::pipeline::construction_layer::builders::NodeBuilder;
-    use zubr_dsp::pipeline::construction_layer::node_builder::{
-        PipelineBuildVector, PipelineParameters,
-    };
-    use zubr_dsp::pipeline::orchestration_layer::pipeline_graph::PipelineGraph;
-    use zubr_dsp::pipeline::orchestration_layer::thread_pool_models::work_stealing_full_buffer::{
-        build_topographical_thread_pool, ThreadPoolTopographicalHandle,
-    };
 
-    fn generate_test_pipeline_cpu(async_runtime: &Runtime) -> (
-        Arc<PipelineGraph>,
-        ThreadPoolTopographicalHandle,
-        Receiver<i32>,
-    ) {
-        let test_vec: BufferArray<i32, 8> =
-            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
-        initiate_pipeline(Level::Warn);
-        let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
-            PipelineParameters::new(16),
-        )));
-        let mut source: NodeBuilder<_, _, 0, 1> = NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
-            "test_source".to_string(),
-            TestSourceI32::new(test_vec),
-            build_vector.clone(),
+    fn generate_test_pipeline_cpu(
+        async_runtime: Arc<Runtime>,
+    ) -> (Pipeline<ThreadPoolTopographicalHandle>, Receiver<i32>) {
+        let (out_send, out_recv) = channel(100);
+
+        let pipeline = build_pipeline(
+            Box::new(|bv, par| {
+                let test_vec: BufferArray<i32, 8> =
+                    BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
+                let mut source: UnfinishedNodeBuilder<(), i32, 0, 1> =
+                    UnfinishedNodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
+                        "test source".to_string(),
+                        TestSourceI32::new(test_vec),
+                        bv.clone(),
+                        par.clone(),
+                        RunModel::CPU,
+                    );
+                let mut step1: UnfinishedNodeBuilder<i32, i32, 1, 1> = source.attach_standard(
+                    "test_step".to_string(),
+                    TestLinearI32Mult::new(),
+                    RunModel::CPU,
+                );
+                step1.add_pipeline_sink(
+                    "test_sink".to_string(),
+                    TestSinkI32::new(out_send),
+                    RunModel::CPU,
+                );
+            }),
+            PipelineParameters::standard_no_analytics(),
+            async_runtime,
         );
 
-        let (out_send, out_recv) = channel(100);
-        let step1: NodeBuilder<_, _, 1, 1> = source
-            .attach_standard("test_step".to_string(), TestLinearI32Mult::new())
-            .add_pipeline_sink("test_sink".to_string(), TestSinkI32::new(out_send));
-
-        source.submit_cpu();
-        step1.submit_cpu();
-
-        let graph = Arc::new(PipelineGraph::new(build_vector));
-        let handle = build_topographical_thread_pool(4, 1, graph.clone(), async_runtime, None);
-
-        (graph, handle, out_recv)
+        (pipeline.unwrap(), out_recv)
     }
 
-    fn generate_test_pipeline_asynchronous(async_runtime: &Runtime) -> (
-        Arc<PipelineGraph>,
-        ThreadPoolTopographicalHandle,
-        Receiver<i32>,
-    ) {
-        let test_vec: BufferArray<i32, 8> =
-            BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
-        initiate_pipeline(Level::Warn);
-        let build_vector = Rc::new(RefCell::new(PipelineBuildVector::new(
-            PipelineParameters::new(16),
-        )));
-        let mut source: NodeBuilder<_, _, 0, 1> = NodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
-            "test_source".to_string(),
-            TestSourceI32::new(test_vec),
-            build_vector.clone(),
+    fn generate_test_pipeline_asynchronous(
+        async_runtime: Arc<Runtime>,
+    ) -> (Pipeline<ThreadPoolTopographicalHandle>, Receiver<i32>) {
+        let (out_send, out_recv) = channel(100);
+
+        let pipeline = build_pipeline(
+            Box::new(|bv, par| {
+                let test_vec: BufferArray<i32, 8> =
+                    BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
+                let mut source: UnfinishedNodeBuilder<(), i32, 0, 1> =
+                    UnfinishedNodeBuilder::<(), i32, 0, 1>::add_pipeline_source(
+                        "test source".to_string(),
+                        TestSourceI32::new(test_vec),
+                        bv.clone(),
+                        par.clone(),
+                        RunModel::IO,
+                    );
+                let mut step1: UnfinishedNodeBuilder<i32, i32, 1, 1> = source.attach_standard(
+                    "test_step".to_string(),
+                    TestLinearI32Mult::new(),
+                    RunModel::IO,
+                );
+                step1.add_pipeline_sink(
+                    "test_sink".to_string(),
+                    TestSinkI32::new(out_send),
+                    RunModel::IO,
+                );
+            }),
+            PipelineParameters::standard_no_analytics(),
+            async_runtime,
         );
 
-        let (out_send, out_recv) = channel(100);
-        let step1: NodeBuilder<_, _, 1, 1> = source
-            .attach_standard("test_step".to_string(), TestLinearI32Mult::new())
-            .add_pipeline_sink("test_sink".to_string(), TestSinkI32::new(out_send));
-
-        source.submit_io();
-        step1.submit_io();
-
-        let graph = Arc::new(PipelineGraph::new(build_vector));
-        let handle = build_topographical_thread_pool(4, 1, graph.clone(), async_runtime, None);
-
-        (graph, handle, out_recv)
+        (pipeline.unwrap(), out_recv)
     }
     #[test]
     fn test_linear_pipeline_cpu() {
         let test_vec: BufferArray<i32, 8> =
             BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        initiate_pipeline(Level::Debug);
 
-        rt.block_on(async {
-            let (_graph, mut handle, mut receiver) = generate_test_pipeline_cpu(&rt);
-            handle.start(&rt);
+        rt.clone().block_on(async {
+            let (mut handle, mut receiver) = generate_test_pipeline_cpu(rt.clone());
+            handle.start();
             error!("test_linear_pipeline start");
 
             let mut res_vec = Vec::new();
@@ -104,7 +105,7 @@ use crate::infrastructure::test_models::{
                 error!("Received: {}", output_value);
             }
             error!("input received");
-            handle.kill();
+            handle.stop();
             verify_input_output(
                 test_vec,
                 BufferArray::new_with_value(res_vec.try_into().unwrap()),
@@ -117,11 +118,12 @@ use crate::infrastructure::test_models::{
     fn test_linear_pipeline_async() {
         let test_vec: BufferArray<i32, 8> =
             BufferArray::<i32, 8>::new_with_value([1, 2, 3, 4, 5, 6, 7, 8]);
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        initiate_pipeline(Level::Warn);
 
-        rt.block_on(async {
-            let (_graph, mut handle, mut receiver) = generate_test_pipeline_asynchronous(&rt);
-            handle.start(&rt);
+        rt.clone().block_on(async {
+            let (mut handle, mut receiver) = generate_test_pipeline_asynchronous(rt.clone());
+            handle.start();
             error!("test_linear_pipeline start");
 
             let mut res_vec = Vec::new();
@@ -131,7 +133,7 @@ use crate::infrastructure::test_models::{
                 error!("Received: {}", output_value);
             }
             error!("input received");
-            handle.kill();
+            handle.stop();
             verify_input_output(
                 test_vec,
                 BufferArray::new_with_value(res_vec.try_into().unwrap()),

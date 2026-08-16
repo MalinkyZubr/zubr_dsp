@@ -1,6 +1,6 @@
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
-use crate::engine::structural::pipeline_type_traits::*;
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray};
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use num::Num;
 use std::iter::Sum;
 
@@ -18,12 +18,12 @@ impl<T: Sharable + Num + Sum + std::ops::AddAssign<T> + Copy, const BUFFER_SIZE:
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
+        input: &mut [BufferArray<T, BUFFER_SIZE>; 1],
+        output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
-            *output.read().get_mut(idx) = *input[0].read().get(idx);
-            *output.read().get_mut(idx) += self.const_values[idx];
+            *output.get_mut(idx) = *input[0].get(idx);
+            *output.get_mut(idx) += self.const_values[idx];
         }
         Ok(())
     }
@@ -43,12 +43,12 @@ impl<T: Sharable + Num + std::ops::SubAssign<T> + Copy, const BUFFER_SIZE: usize
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
+        input: &mut [BufferArray<T, BUFFER_SIZE>; 1],
+        output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
-            *output.read().get_mut(idx) = *input[0].read().get(idx);
-            *output.read().get_mut(idx) -= self.const_values[idx];
+            *output.get_mut(idx) = *input[0].get(idx);
+            *output.get_mut(idx) -= self.const_values[idx];
         }
         Ok(())
     }
@@ -68,12 +68,12 @@ impl<T: Sharable + Num + std::ops::MulAssign<T> + Copy, const BUFFER_SIZE: usize
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
+        input: &mut [BufferArray<T, BUFFER_SIZE>; 1],
+        output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
-            *output.read().get_mut(idx) = *input[0].read().get(idx);
-            *output.read().get_mut(idx) *= self.const_values[idx];
+            *output.get_mut(idx) = *input[0].get(idx);
+            *output.get_mut(idx) *= self.const_values[idx];
         }
         Ok(())
     }
@@ -93,12 +93,12 @@ impl<T: Sharable + Num + std::ops::DivAssign<T> + Copy, const BUFFER_SIZE: usize
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>,
+        input: &mut [BufferArray<T, BUFFER_SIZE>; 1],
+        output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
-            *output.read().get_mut(idx) = *input[0].read().get(idx);
-            *output.read().get_mut(idx) /= self.const_values[idx];
+            *output.get_mut(idx) = *input[0].get(idx);
+            *output.get_mut(idx) /= self.const_values[idx];
         }
         Ok(())
     }
@@ -108,51 +108,51 @@ impl<T: Sharable + Num + std::ops::DivAssign<T> + Copy, const BUFFER_SIZE: usize
 mod tests {
     use super::*;
 
-    fn wrapped_buffer<const N: usize>(values: [i32; N]) -> DataWrapper<BufferArray<i32, N>> {
-        DataWrapper::new_with_value(BufferArray::new_with_value(values))
+    fn wrapped_buffer<const N: usize>(values: [i32; N]) -> BufferArray<i32, N> {
+        BufferArray::new_with_value(values)
     }
 
     #[test]
     fn const_adder_adds_constant_values() {
         let mut step = ConstAdder::<i32, 4>::new([10, 20, 30, 40]);
         let mut input = [wrapped_buffer([1, 2, 3, 4])];
-        let mut output = DataWrapper::new_with_value(BufferArray::new());
+        let mut output = BufferArray::new();
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
-        assert_eq!(output.read().read(), &[11, 22, 33, 44]);
+        assert_eq!(output.read(), &[11, 22, 33, 44]);
     }
 
     #[test]
     fn const_subtractor_subtracts_constant_values() {
         let mut step = ConstSubtractor::<i32, 4>::new([1, 2, 3, 4]);
         let mut input = [wrapped_buffer([10, 20, 30, 40])];
-        let mut output = DataWrapper::new_with_value(BufferArray::new());
+        let mut output = BufferArray::new();
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
-        assert_eq!(output.read().read(), &[9, 18, 27, 36]);
+        assert_eq!(output.read(), &[9, 18, 27, 36]);
     }
 
     #[test]
     fn const_multiplier_multiplies_by_constant_values() {
         let mut step = ConstMultiplier::<i32, 4>::new([2, 3, 4, 5]);
         let mut input = [wrapped_buffer([1, 2, 3, 4])];
-        let mut output = DataWrapper::new_with_value(BufferArray::new());
+        let mut output = BufferArray::new();
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
-        assert_eq!(output.read().read(), &[2, 6, 12, 20]);
+        assert_eq!(output.read(), &[2, 6, 12, 20]);
     }
 
     #[test]
     fn const_divider_divides_by_constant_values() {
         let mut step = ConstDivider::<i32, 4>::new([2, 4, 3, 8]);
         let mut input = [wrapped_buffer([10, 20, 9, 32])];
-        let mut output = DataWrapper::new_with_value(BufferArray::new());
+        let mut output = BufferArray::new();
 
         step.run_cpu(&mut input, &mut output).unwrap();
 
-        assert_eq!(output.read().read(), &[5, 5, 3, 4]);
+        assert_eq!(output.read(), &[5, 5, 3, 4]);
     }
 }

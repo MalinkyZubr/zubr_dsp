@@ -1,10 +1,10 @@
+use std::mem;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use std::time::Instant;
 use async_trait::async_trait;
-use crate::engine::structural::generic_node_operation;
-use crate::engine::structural::pipeline_type_traits::Sharable;
-use crate::engine::communication_layer::data_management::*;
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
 use tokio::time::{sleep, Duration};
+use crate::engine::data_plane::communication_layer::data_management::BufferArray;
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 
 pub struct Throttle<const BUFFER_SIZE: usize> {
     delay: Duration,
@@ -25,8 +25,8 @@ impl<const BUFFER_SIZE: usize> Throttle<BUFFER_SIZE> {
 
 #[async_trait]
 impl <T: Sharable, const BUFFER_SIZE: usize> PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, 1> for Throttle<BUFFER_SIZE> {
-    async fn run_io(&mut self, _input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1], _output: &mut DataWrapper<BufferArray<T, BUFFER_SIZE>>) -> Result<(), ()> {
-        _input[0].swap_st(_output);
+    async fn run_io(&mut self, _input: &mut [BufferArray<T, BUFFER_SIZE>; 1], _output: &mut BufferArray<T, BUFFER_SIZE>) -> Result<(), ()> {
+        mem::swap(&mut _input[0], _output);
         if Instant::now() < self.target {
             sleep(self.target - Instant::now()).await;
         }

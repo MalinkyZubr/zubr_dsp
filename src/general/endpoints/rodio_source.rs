@@ -10,7 +10,7 @@ pub struct SourceObject {
 }
 impl SourceObject {
     pub fn new(
-        mut samples: Vec<Sample>,
+        samples: Vec<Sample>,
         num_channels: ChannelCount,
         sample_rate: SampleRate,
     ) -> Self {

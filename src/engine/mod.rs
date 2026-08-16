@@ -1,6 +1,7 @@
-pub mod communication_layer;
-pub mod construction_layer;
-pub mod orchestration_layer;
-mod structural;
+pub mod control_plane;
+pub mod data_plane;
+pub mod build;
+pub mod application_wrappers;
+pub mod zubr_dsp_config;
 //mod dummy;
 //mod curses;

@@ -1,0 +1,26 @@
+//use std::ops::{Add, Div, Mul, Neg, Sub};
+
+use num_traits::NumCast;
+use num_traits::Num;
+
+
+pub trait Sharable = Send + Sync + Clone + Default + 'static;
+pub trait SharableCopy = Sharable + Copy;
+pub trait SharableNum = Sharable + Num<FromStrRadixErr=()> + NumCast;
+
+pub trait Unit: Send + Clone {
+    fn gen() -> Self;
+}
+impl Unit for () {
+    fn gen() -> Self {
+        ()
+    }
+}
+
+pub trait True {}
+
+impl True for [(); 1] {}
+
+pub trait False {}
+
+impl False for [(); 0] {}

@@ -1,6 +1,6 @@
-use crate::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use crate::engine::structural::generic_node_operation::PipelineNodeOp;
-use crate::engine::structural::pipeline_type_traits::Sharable;
+use crate::engine::data_plane::communication_layer::data_management::{BufferArray};
+use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
 use num::{Num, NumCast};
 use std::mem;
 
@@ -12,7 +12,7 @@ pub enum UpsamplingMethod {
     ZeroFilling,
 }
 impl UpsamplingMethod {
-    pub fn to_function<T: Num + Sharable + NumCast>(self) -> fn(&T, &T, &mut [T]) {
+    pub fn to_function<T: Num + Sharable + NumCast + Copy>(self) -> fn(&T, &T, &mut [T]) {
         match self {
             Self::LinearInterpolation => linear_interpolation,
             Self::NearestNeighbor => nearest_neighbor,
@@ -67,22 +67,22 @@ pub struct Resampler<
     const BUFFER_SIZE: usize,
     const UPSAMPLE_FACTOR: usize,
     const DECIMATION_FACTOR: usize,
-> where [(); {UPSAMPLE_FACTOR * BUFFER_SIZE}]:, [(); { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }]: 
+> where [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:, [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]: 
 {
     upsample_method: fn(&T, &T, &mut [T]),
-    upsample_buffer: [T; {UPSAMPLE_FACTOR * BUFFER_SIZE}],
+    upsample_buffer: [T; UPSAMPLE_FACTOR * BUFFER_SIZE],
     decimation_buffer: BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
 }
 
 impl<
-        T: Sharable + Num + NumCast,
+        T: Sharable + Num + NumCast + Copy,
         const BUFFER_SIZE: usize,
         const UPSAMPLE_FACTOR: usize,
         const DECIMATION_FACTOR: usize,
     > Resampler<T, BUFFER_SIZE, UPSAMPLE_FACTOR, DECIMATION_FACTOR>
 where
-    [(); { UPSAMPLE_FACTOR * BUFFER_SIZE }]:,
-    [(); { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE]:,
+    [(); UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR]:,
 {
     pub fn new(method: UpsamplingMethod) -> Self {
         Self {
@@ -119,7 +119,7 @@ where
 }
 
 impl<
-        T: Sharable + Num + NumCast,
+        T: Sharable + Num + NumCast + Copy,
         const BUFFER_SIZE: usize,
         const UPSAMPLE_FACTOR: usize,
         const DECIMATION_FACTOR: usize,
@@ -135,14 +135,13 @@ where
 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<T, BUFFER_SIZE>>; 1],
-        output: &mut DataWrapper<
+        input: &mut [BufferArray<T, BUFFER_SIZE>; 1],
+        output: &mut 
             BufferArray<T, { UPSAMPLE_FACTOR * BUFFER_SIZE / DECIMATION_FACTOR }>,
-        >,
     ) -> Result<(), ()> {
-        self.upsample(input[0].read().read_mut());
+        self.upsample(input[0].read_mut());
         self.decimate();
-        output.swap(&mut self.decimation_buffer);
+        output.swap_pointers(&mut self.decimation_buffer);
 
         Ok(())
     }
@@ -268,9 +267,9 @@ mod tests {
 
         let input_array = [1.0, 2.0, 3.0, 4.0];
 
-        let mut input_wrapper = DataWrapper::new_with_value(buffer_from_array(input_array));
+        let mut input_wrapper = buffer_from_array(input_array);
         let mut output_wrapper =
-            DataWrapper::new_with_value(BufferArray::<f32, { N * U / D }>::new());
+            BufferArray::<f32, { N * U / D }>::new();
 
         let mut input_arr = [input_wrapper];
 

@@ -1,9 +1,11 @@
-use log::{debug, warn};
+use std::mem;
+use log::{debug, error, warn};
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
-use zubr_dsp::engine::communication_layer::data_management::{BufferArray, DataWrapper};
-use zubr_dsp::engine::structural::generic_node_operation::{PipelineSink, PipelineSource, PipelineNodeOp};
+use zubr_dsp::engine::data_plane::communication_layer::data_management::BufferArray;
+use zubr_dsp::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
+
 pub struct TestSourceI32<const BS: usize> {
     input_test_vec: BufferArray<i32, BS>,
     test_ctr: usize,
@@ -21,19 +23,21 @@ impl<const BS: usize> TestSourceI32<BS> {
 impl<const BS: usize> PipelineNodeOp<(), i32, 0> for TestSourceI32<BS> {
     fn run_cpu(
         &mut self,
-        _input: &mut [DataWrapper<()>; 0],
-        output: &mut DataWrapper<i32>,
+        _input: &mut [(); 0],
+        output: &mut i32,
     ) -> Result<(), ()> {
-        output.copy_from(self.input_test_vec.get(self.test_ctr));
+        let val = self.input_test_vec.get(self.test_ctr);
+        error!("TEST SOURCE SINGLE OUT: {}", &val);
+        *output = *val;
         self.test_ctr = (self.test_ctr + 1) % self.input_test_vec.len();
         Ok(())
     }
     async fn run_io(
         &mut self,
-        _input: &mut [DataWrapper<()>; 0],
-        output: &mut DataWrapper<i32>,
+        _input: &mut [(); 0],
+        output: &mut i32,
     ) -> Result<(), ()> {
-        output.copy_from(self.input_test_vec.get(self.test_ctr));
+        *output = *self.input_test_vec.get(self.test_ctr);
         sleep(Duration::from_millis(100)).await;
         self.test_ctr = (self.test_ctr + 1) % self.input_test_vec.len();
         Ok(())
@@ -56,21 +60,22 @@ impl TestSinkI32 {
 impl PipelineNodeOp<i32, (), 1> for TestSinkI32 {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<i32>; 1],
-        _output: &mut DataWrapper<()>,
+        input: &mut [i32; 1],
+        _output: &mut (),
     ) -> Result<(), ()> {
+        error!("SINK INPUT {}", input[0]);
         let mut output = 0;
-        input[0].swap(&mut output);
+        mem::swap(&mut input[0], &mut output);
         let _ = self.output_test_sender.try_send(output);
         Ok(())
     }
     async fn run_io(
         &mut self,
-        input: &mut [DataWrapper<i32>; 1],
-        _output: &mut DataWrapper<()>,
+        input: &mut [i32; 1],
+        _output: &mut (),
     ) -> Result<(), ()> {
         let mut output = 0;
-        input[0].swap(&mut output);
+        mem::swap(&mut input[0], &mut output);
         let _ = self.output_test_sender.send(output).await;
         Ok(())
     }
@@ -88,11 +93,11 @@ impl<const BS: usize> TestSourceI32Vec<BS> {
 impl<const BS: usize> PipelineNodeOp<(), BufferArray<i32, BS>, 0> for TestSourceI32Vec<BS> {
     fn run_cpu(
         &mut self,
-        _input: &mut [DataWrapper<()>; 0],
-        output: &mut DataWrapper<BufferArray<i32, BS>>,
+        _input: &mut [(); 0],
+        output: &mut BufferArray<i32, BS>,
     ) -> Result<(), ()> {
-        output.copy_from(&self.input_test_vec);
-        debug!("INTERNAL LOGGING SOURCE: {:?}", output.read().read());
+        self.input_test_vec.copy_to(output);
+        warn!("INTERNAL LOGGING SOURCE: {:?}", output.read());
         Ok(())
     }
 }
@@ -111,12 +116,12 @@ impl<const BS: usize> TestSinkI32Vec<BS> {
 impl<const BS: usize> PipelineNodeOp<BufferArray<i32, BS>, (), 1> for TestSinkI32Vec<BS> {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<BufferArray<i32, BS>>; 1],
-        _output: &mut DataWrapper<()>,
+        input: &mut [BufferArray<i32, BS>; 1],
+        _output: &mut (),
     ) -> Result<(), ()> {
-        debug!("INTERNAL LOGGING SINK: {:?}", input[0].read().read());
+        debug!("INTERNAL LOGGING SINK: {:?}", input[0].read());
         let mut send_value = BufferArray::new();
-        input[0].swap(&mut send_value);
+        mem::swap(&mut input[0], &mut send_value);
         let _ = self.output_test_sender.try_send(send_value);
         Ok(())
     }
@@ -134,23 +139,23 @@ impl TestLinearI32Mult {
 impl PipelineNodeOp<i32, i32, 1> for TestLinearI32Mult {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<i32>; 1],
-        output: &mut DataWrapper<i32>,
+        input: &mut [i32; 1],
+        output: &mut i32,
     ) -> Result<(), ()> {
-        *input[0].read() *= 2;
-        output.swap_st(&mut input[0]);
+        input[0] *= 2;
+        mem::swap(output, &mut input[0]);
 
-        warn!("INTERNAL LOGGING MULT INPUT: {}", *input[0].read());
-        warn!("INTERNAL LOGGING MULT OUTPUT: {}", *output.read());
+        warn!("INTERNAL LOGGING MULT INPUT: {}", input[0]);
+        warn!("INTERNAL LOGGING MULT OUTPUT: {}", *output);
         Ok(())
     }
     async fn run_io(
         &mut self,
-        input: &mut [DataWrapper<i32>; 1],
-        output: &mut DataWrapper<i32>,
+        input: &mut [i32; 1],
+        output: &mut i32,
     ) -> Result<(), ()> {
-        *input[0].read() *= 2;
-        output.swap_st(&mut input[0]);
+        input[0] *= 2;
+        mem::swap(output, &mut input[0]);
         Ok(())
     }
 }
@@ -167,14 +172,14 @@ impl TestAdder {
 impl<const N: usize> PipelineNodeOp<i32, i32, N> for TestAdder {
     fn run_cpu(
         &mut self,
-        input: &mut [DataWrapper<i32>; N],
-        output: &mut DataWrapper<i32>,
+        input: &mut [i32; N],
+        output: &mut i32,
     ) -> Result<(), ()> {
         let mut internal_value = 0;
         for i in input.iter_mut() {
-            internal_value += *i.read();
+            internal_value += *i;
         }
-        output.swap(&mut internal_value);
+        mem::swap(output, &mut internal_value);
         Ok(())
     }
 }
