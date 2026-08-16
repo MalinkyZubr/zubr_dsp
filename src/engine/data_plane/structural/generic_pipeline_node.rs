@@ -35,7 +35,7 @@ pub enum NodeState {
 }
 
 #[async_trait]
-pub trait GenericNode: Send + Sync + 'static {
+pub trait GenericNode: Send + 'static {
     async fn run_senders(&mut self) -> Option<usize>; // this return value contains all the successors ready to run
     fn get_satiated_edges(&self, num_satiated: usize) -> &[usize];
     fn load_initial_value(&mut self);

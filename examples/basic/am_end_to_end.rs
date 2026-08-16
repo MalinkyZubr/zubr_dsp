@@ -9,8 +9,6 @@ use tokio::runtime::Builder;
 use zubr_dsp::dsp::core::complex_magnitude::ComplexMagnitude;
 use zubr_dsp::dsp::core::converters::{ComplexToReal, RealToComplex};
 use zubr_dsp::dsp::filtering::fir::fir::FIRFilter;
-use zubr_dsp::dsp::modulation::am::am_demod::AMDemodulator;
-use zubr_dsp::dsp::modulation::am::am_mod::AMModulator;
 use zubr_dsp::dsp::sampling::resampling::{Resampler, UpsamplingMethod};
 use zubr_dsp::dsp::sampling::simple_downsample::SimpleDownsampler;
 use zubr_dsp::dsp::system_response::fft::{FFT, IFFT};
@@ -20,13 +18,17 @@ use zubr_dsp::general::endpoints::audio_endpoint::AudioSink;
 use zubr_dsp::general::sources::audio_file_source::AudioFileSource;
 use zubr_dsp::general::throttle::Throttle;
 use zubr_dsp::engine::data_plane::communication_layer::data_management::BufferArray;
-use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, PipelineParameters, UnfinishedNodeBuilder};
+use zubr_dsp::engine::data_plane::construction::unfinished_node_builder::{PipelineInterfaceConfiguration, UnfinishedNodeBuilder};
 use zubr_dsp::dsp::sampling::simple_downsample::*;
 use zubr_dsp::engine::build::build_pipeline;
 use zubr_dsp::engine::control_plane::pipeline_hl::Pipeline;
 use zubr_dsp::engine::control_plane::scheduler_models::topographical::ThreadPoolTopographicalHandle;
 use zubr_dsp::engine::data_plane::structural::generic_pipeline_node::RunModel::{CPU, IO};
+use zubr_dsp::engine::zubr_dsp_config::PipelineParameters;
 use zubr_dsp::initiate_pipeline;
+use zubr_dsp::dsp::modulation::iq::am::{am_mod, am_demod};
+use zubr_dsp::dsp::modulation::iq::am::am_demod::AMDemodulator;
+use zubr_dsp::dsp::modulation::iq::am::am_mod::AMModulator;
 
 pub fn am_end_to_end_test() -> Result<(), String> {
     println!("Beginning simulated AM end to end test\nEnter absolute path to mp3:");
@@ -63,24 +65,15 @@ pub fn am_end_to_end_test() -> Result<(), String> {
                 CPU
             );
             let carrier_amplitude = 10.0;
-            let carrier_frequency = 1e8;
             let modulation_index = 0.5;
-            let sample_frequency = 2.5e6;
+            let sample_frequency = 44.1e3;
             
             source
-                .attach_standard::<_, 1, 1>("throttle".to_string(), Throttle::new(88.2e3), IO)
-                .attach_standard::<_, 1, 1>("upsampler".to_string(), Resampler::<_, 2048, 29, 1>::new(UpsamplingMethod::LinearInterpolation), CPU)
-                .attach_standard::<_, 1, 1>("AM Modulator".to_string(), AMModulator::new(carrier_amplitude, carrier_frequency, modulation_index, sample_frequency), CPU)
-                .attach_standard::<_, 1, 1>("Chunker".to_string(), breaker, CPU)
-                .attach_series_deconstructor::<1>("deconstructor".to_string())
-                .attach_standard::<_, 1, 1>("to complex".to_string(), RealToComplex::new(), CPU)
-                .attach_standard::<_, 1, 1>("fft".to_string(), FFT::new(), CPU)
-                .attach_standard::<_, 1, 1>("analytic filter".to_string(), FIRFilter::new(tf_analytic::<_, 512>()), CPU)
-                .attach_standard::<_, 1, 1>("ifft".to_string(), IFFT::new(), CPU)
-                .attach_standard::<_, 1, 1>("to real".to_string(), ComplexMagnitude::new(), CPU)
-                .attach_series_reconstructor::<1, 8>("reconstructor".to_string())
-                .attach_standard::<_, 1, 1>("dechunker".to_string(), combiner, CPU)
-                .attach_standard::<_, 1, 1>("demodulator".to_string(), AMDemodulator::new(carrier_amplitude, modulation_index), CPU)
+                .attach_standard::<_, 1, 1>("throttle".to_string(), Throttle::new(88.1e3), IO)
+                .attach_standard::<_, 1, 1>("Real to complex".to_string(), RealToComplex::new(), CPU)
+                .attach_standard::<_, 1, 1>("AM Modulator".to_string(), AMModulator::new(carrier_amplitude, modulation_index), CPU)
+                .attach_standard::<_, 1, 1>("AM DeModulator".to_string(), AMDemodulator::new(carrier_amplitude, modulation_index), CPU)
+                .attach_standard::<_, 1, 1>("Complex to real".to_string(), ComplexToReal::new(), CPU)
                 .add_pipeline_sink("audio sink".to_string(), AudioSink::new(2, 44100, aud_sink), CPU);
         }),
         PipelineParameters::standard_no_analytics(),

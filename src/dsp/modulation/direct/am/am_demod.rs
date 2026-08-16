@@ -1,5 +1,5 @@
 use log::error;
-use crate::dsp::modulation::am::am_mod::AMModulator;
+use crate::dsp::modulation::direct::am::am_mod::AMModulator;
 use crate::engine::data_plane::communication_layer::data_management::BufferArray;
 use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 

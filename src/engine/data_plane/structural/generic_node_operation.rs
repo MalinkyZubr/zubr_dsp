@@ -8,8 +8,9 @@ use std::any::type_name;
 2. user can return whatever data scheme they want from each separate handler for the node to do with what it pleases
 3. at the beginning of runtime, depending on the receiver type assigned to the node, a different handler (node method) is chosen to receive, so no additional match is needed
  */
+//need a system for controlling parameters at runtime via mpsc
 #[async_trait]
-pub trait PipelineNodeOp<I: Sharable, O: Sharable, const NI: usize>: Send + Sync + 'static {
+pub trait PipelineNodeOp<I: Sharable, O: Sharable, const NI: usize>: Send + 'static {
     fn run_cpu(
         &mut self,
         _input: &mut [I; NI],

@@ -57,7 +57,6 @@ num_cpus = "1.17.0"
 bounded-spsc-queue = "0.4.0"
 nalgebra = "0.34.2"
 num-traits = "0.2.19"
-rtl-sdr-rs = "0.3.1"
 backtrace-on-stack-overflow = "0.3.0"
 fixed-vec-deque = "0.1.11"
 iced = { version = "0.14.0", features = ["image", "tokio"] }
@@ -66,6 +65,8 @@ iced_table2 = "0.14.2"
 plotters-iced = "0.11.0"
 env_logger = "0.11.11"
 image = {version = "0.24.1", features = ["ico"] }
+desperado = { version = "0.4.2", features = ["rtlsdr"] }
+
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

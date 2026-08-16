@@ -6,7 +6,7 @@ use scc::HashMap as SCCHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time;
 use std::time::UNIX_EPOCH;
 use iced::widget::text::success;
@@ -51,7 +51,8 @@ impl PipelineNodeState {
 
 
 pub struct PipelineGraph {
-    nodes: SCCHashMap<usize, NodeWrapper>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
+    nodes: SCCHashMap<usize, Mutex<Option<NodeWrapper>>>, // holds the actual computation and node data. A node can only be held by one thread at once and should be popped from here when in use
+    // we hold the node in a mutex option not for contention, but to remove need for Sync trait on nodes. Runtime characteristics guarantee no penalty from contentions
     source_ids: Vec<usize>,
     sink_ids: Vec<usize>,
     initially_stateful_ids: Vec<usize>,
@@ -78,7 +79,7 @@ impl PipelineGraph {
                 initially_stateful_ids.push(node_wrapper.get_id());
             }
             let node_id = node_wrapper.get_id();
-            match nodes.insert_sync(node_id, node_wrapper) {
+            match nodes.insert_sync(node_id, Mutex::new(Some(node_wrapper))) {
                 Ok(_) => {}
                 Err(_) => panic!("Node {} already exists in the graph", node_id),
             }
@@ -101,7 +102,7 @@ impl PipelineGraph {
         let mut nodes = Vec::with_capacity(self.nodes.len());
 
         for id in 0..self.num_nodes {
-            if let Some((_id, node)) = self.nodes.remove_if_sync(&id, |_| true) {
+            if let Some((_id, node)) = self.get_node(id) {
                 nodes.push(node);
             }
         }
@@ -199,11 +200,30 @@ impl PipelineGraph {
     // pub fn stop_all(&self) {}
     // 
     pub fn get_node(&self, id: usize) -> Option<(usize, NodeWrapper)> {
-        self.nodes.remove_if_sync(&id, |_| true)
+        match self.nodes.get_sync(&id) {
+            Some(mut mutex_node) => {
+                let true_node = (*mutex_node).get_mut().unwrap();
+                match true_node.take() {
+                    Some(taken_node) => Some((id, taken_node)), // if the node is idle
+                    None => None, // if the node is in use
+                }
+            }
+            None => None // if the node doesnt actually exist
+        }
     }
     // 
     pub fn place_node(&self, id: usize, node: NodeWrapper) -> Option<()> {
-        self.nodes.insert_sync(id, node).ok()
+        match self.nodes.get_sync(&id) {
+            Some(mut mutex_node) => {
+                let mut true_node = (*mutex_node).get_mut().unwrap();
+                if true_node.is_some() {
+                    panic!("Node {} already exists in the graph. This is bizarre. You did something super bad", id);
+                }
+                *true_node = Some(node);
+                Some(())
+            }
+            None => None // if the node doesnt actually exist
+        }
     }
 }
 
