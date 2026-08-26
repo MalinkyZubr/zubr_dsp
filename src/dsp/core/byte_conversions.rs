@@ -33,3 +33,7 @@ for BytesToNum
         Ok(())
     }
 }
+
+//
+// pub struct BytestreamCombiner {}
+// impl PipelineNodeOp<BufferArray<u8, >>

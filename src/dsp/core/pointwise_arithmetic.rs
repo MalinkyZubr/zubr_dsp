@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use crate::engine::data_plane::communication_layer::data_management::{BufferArray};
 use crate::engine::data_plane::structural::generic_node_operation::PipelineNodeOp;
 use crate::engine::data_plane::structural::pipeline_type_traits::Sharable;
@@ -23,6 +24,7 @@ impl<
         output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
+            *output.get_mut(idx) = num::zero();
             for input_channel in 0..NI {
                 *output.get_mut(idx) += *input[input_channel].get(idx);
             }
@@ -37,7 +39,7 @@ impl<const BUFFER_SIZE: usize> PointwiseSubtractor<BUFFER_SIZE> {
         Self {}
     }
 }
-impl<T: Sharable + Num + std::ops::SubAssign<T> + Copy, const BUFFER_SIZE: usize, const NI: usize>
+impl<T: Sharable + Num + std::ops::SubAssign<T> + Copy + Debug, const BUFFER_SIZE: usize, const NI: usize>
     PipelineNodeOp<BufferArray<T, BUFFER_SIZE>, BufferArray<T, BUFFER_SIZE>, NI>
     for PointwiseSubtractor<BUFFER_SIZE>
 {
@@ -46,11 +48,15 @@ impl<T: Sharable + Num + std::ops::SubAssign<T> + Copy, const BUFFER_SIZE: usize
         input: &mut [BufferArray<T, BUFFER_SIZE>; NI],
         output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
+        print!("{:?} - {:?}", input[0].read(), input[1].read());
         for idx in 0..BUFFER_SIZE {
-            for input_channel in 0..NI {
+            *output.get_mut(idx) = *input[0].get(idx);
+
+            for input_channel in 1..NI {
                 *output.get_mut(idx) -= *input[input_channel].get(idx);
             }
         }
+        println!(" = {:?}", output.read());
         Ok(())
     }
 }
@@ -71,6 +77,7 @@ impl<T: Sharable + Num + std::ops::MulAssign<T> + Copy, const BUFFER_SIZE: usize
         output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
+            *output.get_mut(idx) = num::zero();
             for input_channel in 0..NI {
                 *output.get_mut(idx) *= *input[input_channel].get(idx);
             }
@@ -95,7 +102,9 @@ impl<T: Sharable + Num + std::ops::DivAssign<T> + Copy, const BUFFER_SIZE: usize
         output: &mut BufferArray<T, BUFFER_SIZE>,
     ) -> Result<(), ()> {
         for idx in 0..BUFFER_SIZE {
-            for input_channel in 0..NI {
+            *output.get_mut(idx) = *input[0].get(idx);
+
+            for input_channel in 1..NI {
                 *output.get_mut(idx) /= *input[input_channel].get(idx);
             }
         }

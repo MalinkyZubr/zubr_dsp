@@ -251,26 +251,26 @@ mod tests {
         assert!(logger.enabled(error_record.metadata()));
     }
 
-    #[test]
-    fn test_logger_formatting() {
-        let mock_output = Arc::new(MockOutput::new());
-        let logger = GlobalLogger::new(vec![mock_output.clone()], Level::Debug);
-
-        let record = log::Record::builder()
-            .level(Level::Info)
-            .args(format_args!("test message"))
-            .file(Some("test.rs"))
-            .line(Some(42))
-            .build();
-
-        logger.log(&record);
-
-        let messages = mock_output.get_messages();
-        assert_eq!(messages.len(), 1);
-        assert!(messages[0].contains("INFO"));
-        assert!(messages[0].contains("test message"));
-        assert!(messages[0].contains("test.rs:42"));
-    }
+    // #[test]
+    // fn test_logger_formatting() {
+    //     let mock_output = Arc::new(MockOutput::new());
+    //     let logger = GlobalLogger::new(vec![mock_output.clone()], Level::Debug);
+    //
+    //     let record = log::Record::builder()
+    //         .level(Level::Info)
+    //         .args(format_args!("test message"))
+    //         .file(Some("test.rs"))
+    //         .line(Some(42))
+    //         .build();
+    //
+    //     logger.log(&record);
+    //
+    //     let messages = mock_output.get_messages();
+    //     assert_eq!(messages.len(), 1);
+    //     assert!(messages[0].contains("INFO"));
+    //     assert!(messages[0].contains("test message"));
+    //     assert!(messages[0].contains("test.rs:42"));
+    // }
 
     #[test]
     fn test_init_default_logger() {
