@@ -2,6 +2,7 @@ import scipy.signal as scp_signal
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import sosfiltfilt
+import cmath
 
 
 def phase_accumulator_modulator(datastream: list[int], sample_rate: int, binary_dict: tuple[int, int]) -> np.array:
@@ -24,7 +25,7 @@ def energy_correlator(recv_buff: np.array, sym_buff: np.array, sample_rate: floa
     return filtered_data
 
 
-def incoherent_demodulator(sample_stream: list[float], sample_rate: int, binary_dict: tuple[int, int]) -> np.array:
+def incoherent_demodulator(sample_stream: np.array, sample_rate: int, binary_dict: tuple[int, int]) -> np.array:
     minimum_samples_per_symbol = int(np.ceil(max(sample_rate / binary_dict[0], sample_rate / binary_dict[1])))
 
     in_phase_sym_0 = phase_accumulator_modulator([0], sample_rate, binary_dict)
@@ -50,25 +51,72 @@ def incoherent_demodulator(sample_stream: list[float], sample_rate: int, binary_
     return data_buff
 
 
+def coherent_demodulator(sample_stream: np.array, sample_rate: int, binary_dict: tuple[int, int]) -> np.array:
+    minimum_samples_per_symbol = int(np.ceil(max(sample_rate / binary_dict[0], sample_rate / binary_dict[1])))
+
+    nco_output_sample = 1 + 0j
+    phase_difference_buffer = [0, 0]
+    nco_frequency = 100
+    nco_accumulator = 0
+
+    frequencies = []
+    symbols = []
+
+    for input_sample in sample_stream:
+        nco_output_conj = nco_output_sample.conjugate()
+        difference_signal = input_sample * nco_output_conj
+        phase_offset = cmath.phase(difference_signal) % (2 * np.pi)
+        frequency = phase_offset - phase_difference_buffer[0]
+        frequency_error = abs(nco_frequency - frequency)
+        phase_difference_buffer = [phase_offset] + [phase_difference_buffer[0]]
+
+        nco_frequency += 100 * frequency_error
+        frequencies.append(nco_frequency)
+        nco_accumulator = (nco_accumulator + (nco_frequency / sample_rate)) % 1.0
+        nco_output_sample = np.exp(2 * np.pi * nco_accumulator * 1j)
+
+        if len(frequencies) == minimum_samples_per_symbol:
+            avg_value = sum(frequencies) / minimum_samples_per_symbol
+            if abs(avg_value - binary_dict[0]) > abs(avg_value - binary_dict[1]):
+                symbols.append(1)
+            else:
+                symbols.append(0)
+            frequencies = []
+
+
+    return np.asarray(symbols)
+
+
 if __name__ == "__main__":
-    SAMPLE_RATE = 1000
-    SYMBOLS = (10, 20)
-    sos = scp_signal.butter(N=25, Wn=30, btype='low', fs=SAMPLE_RATE, output='sos')
+    SAMPLE_RATE = 100000
+    SYMBOLS = (100, 200)
+    sos = scp_signal.butter(N=25, Wn=250, btype='low', fs=SAMPLE_RATE, output='sos')
 
     data = np.random.randint(0, 2, 128)
     baseband_signal = phase_accumulator_modulator(list(data), SAMPLE_RATE, SYMBOLS)
-    baseband_signal += 1 * np.random.normal(0.0, 0.5, baseband_signal.shape)
+    sig_power = sum(np.square(np.abs(baseband_signal))) / baseband_signal.size
+    noise = 10 * np.random.normal(0.0, 0.5, baseband_signal.shape)
+    noise_power = sum(np.square(np.abs(noise))) / noise.size
+    baseband_signal += noise
 
-    baseband_signal = sosfiltfilt(sos, baseband_signal)
-    demodulated = np.asarray(incoherent_demodulator(list(baseband_signal), SAMPLE_RATE, SYMBOLS))
+    #baseband_signal = sosfiltfilt(sos, baseband_signal)
 
-    snr = scp_signal
-    berror_rate = np.sum(data != demodulated) / len(data)
-    print(f"Bit Error Rate: {berror_rate}")
+    snr = 10 * np.log10(sig_power / noise_power)
+
+    print(f"SNR: {snr}")
+
+    incoherent_demodulated = np.asarray(incoherent_demodulator(baseband_signal, SAMPLE_RATE, SYMBOLS))
+    berror_rate = np.sum(data != incoherent_demodulated) / len(data)
+    print(f"Incoherent Bit Error Rate: {berror_rate}")
     x = np.arange(0, 128)
-    plt.step(x, data)
-    plt.step(x, demodulated + 2)
-    plt.show()
+    plt.step(x, data, label="Original Waveform")
+    plt.step(x, incoherent_demodulated + 1.1, label="incoherent demodulated")
 
-    plt.plot(baseband_signal)
+    coherent_demodulated = coherent_demodulator(baseband_signal, SAMPLE_RATE, SYMBOLS)
+    berror_rate = np.sum(data != coherent_demodulated) / len(data)
+    print(f"Coherent Bit Error Rate: {berror_rate}")
+
+    x = np.arange(0, 128)
+    plt.step(x, coherent_demodulated + 2.2, label="coherent demodulated")
+    plt.legend()
     plt.show()
